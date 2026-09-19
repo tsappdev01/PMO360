@@ -29,20 +29,52 @@ in their own `GO` batch, because a batch aborts on error and takes the rest of t
 | `020_views_powerbi.sql` | The reporting views Power BI reads (section 5.4). |
 | `030_permissions.sql` | The application and Power BI principals and their rights. Set the two principal names first. |
 
-With `sqlcmd`:
+### The runner scripts
 
-```bash
-for f in 001_schema.sql 002_controlled_values.sql 003_reference_data.sql \
-         010_functions.sql 011_procs_project.sql 012_procs_update.sql \
-         013_procs_milestone_risk.sql 014_procs_dashboard.sql \
-         015_procs_attachment_notification.sql 020_views_powerbi.sql; do
-  sqlcmd -S "$SQL_SERVER" -d PMO360 -G -i "$f" -b || break
-done
+`apply.ps1` (PowerShell) and `apply.sh` (bash) do the whole run. Both apply every `.sql` file in
+this folder in filename order — which is why they are numbered. A new script is picked up by
+being dropped in with the right number; there is no list inside the runners to keep in step.
+
+```powershell
+# Azure SQL, signed in with Entra ID
+./apply.ps1 -Server pmo360-uat.database.windows.net
+
+# Local SQL Server with a SQL login and a self-signed certificate
+./apply.ps1 -Server localhost,1433 -Auth Sql -User sa -TrustCert -CreateDatabase
+
+# See what would run, without running it
+./apply.ps1 -Server pmo360-uat.database.windows.net -DryRun
 ```
 
-`-G` authenticates with Entra ID. `-b` stops on the first error, so a failure is not buried under
-the scripts that follow it. Run `030_permissions.sql` separately, once the principal names in it
-are right for the environment.
+```bash
+./apply.sh --server pmo360-uat.database.windows.net
+./apply.sh --server localhost,1433 --auth sql --user sa --trust-cert --create-database
+./apply.sh --server pmo360-uat.database.windows.net --dry-run
+```
+
+`--include-permissions` / `-IncludePermissions` adds `030_permissions.sql`, which is held back
+by default because the principal names inside it are per-environment. `--include-migration` /
+`-IncludeMigration` adds any `9xx_*.sql` load (see `docs/04-migration.md`); those are run
+deliberately and once, so they are held back too.
+
+Both runners pass `-b` to sqlcmd and stop on the first error, printing it and exiting non-zero.
+A failure is never buried under the scripts that follow it, and a half-applied database is
+obvious rather than quiet.
+
+Neither runner takes a password on the command line, where it would be visible in the process
+list and in shell history: `apply.sh` reads `SQLCMDPASSWORD` or prompts, and `apply.ps1` takes a
+`SecureString` or prompts.
+
+### By hand
+
+If you would rather run them individually — applying one new script to an environment that is
+otherwise current, say:
+
+```bash
+sqlcmd -S "$SQL_SERVER" -d PMO360 -G -b -I -i 012_procs_update.sql
+```
+
+`-G` authenticates with Entra ID and `-b` stops on the first error.
 
 The procedures in `011` call procedures defined in `013` and `015`. SQL Server resolves those
 names when the procedure runs, not when it is created, so the order above is fine — but all the

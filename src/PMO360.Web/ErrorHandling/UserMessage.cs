@@ -37,7 +37,7 @@ public static class UserMessage
     {
         // Connection-level problems: the portal could not get to the database at all.
         -2 or 258 => "The database did not respond in time. Try again in a moment.",
-        53 or 17142 or 10060 or 10061 or 40613 =>
+        0 or -1 or 53 or 17142 or 10060 or 10061 or 40613 =>
             "The portal cannot reach the PMO360 database at the moment. This is usually temporary; "
             + "if it continues, tell IT Support.",
         18456 or 4060 =>

@@ -18,11 +18,25 @@ try
 }
 catch (StartupFailureException failure)
 {
-    Console.Error.WriteLine();
-    Console.Error.WriteLine(new string('-', 78));
-    Console.Error.WriteLine(failure.Message);
-    Console.Error.WriteLine(new string('-', 78));
-    Console.Error.WriteLine();
+    var rule = new string('-', 78);
+    var block = Environment.NewLine + rule + Environment.NewLine
+                + failure.Message + Environment.NewLine
+                + rule + Environment.NewLine;
+
+    Console.Error.WriteLine(block);
+
+    // Visual Studio shows this in Output -> Debug. Without it, a developer running from the IDE
+    // sees only "Unable to connect to web server 'PMO360.Web'", because the process exits before
+    // Kestrel binds its port and the console window has already gone.
+    System.Diagnostics.Trace.WriteLine(block);
+
+    if (System.Diagnostics.Debugger.IsAttached)
+    {
+        // Under a debugger, let it surface: the exception helper puts the message in front of the
+        // developer, which is the whole point. The message is the readable one, not a stack.
+        throw;
+    }
+
     Environment.Exit(1);
 }
 

@@ -16,6 +16,7 @@ namespace PMO360.Infrastructure.Startup;
 /// </summary>
 public sealed class DatabaseHealthCheck(
     ISqlConnectionFactory connections,
+    IHostEnvironment environment,
     ILogger<DatabaseHealthCheck> logger) : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -62,6 +63,18 @@ public sealed class DatabaseHealthCheck(
                 "The PMO360 database could not be reached at startup: SQL error {Number} - {Message}",
                 ex.Number, ex.Message);
             logger.LogDebug(ex, "Full detail of the startup connection failure.");
+
+            // In Development this is advisory. Not being able to start at all because SQL Server
+            // is down is the wrong trade for somebody working on a page: the portal starts, and
+            // the first page that needs data says so in words the reader can act on.
+            if (environment.IsDevelopment())
+            {
+                logger.LogWarning(
+                    "Starting anyway because this is the {Environment} environment. Any page that "
+                    + "needs data will fail until the database is reachable.{NewLine}{Detail}",
+                    environment.EnvironmentName, Environment.NewLine, DescribeConnectionFailure(ex));
+                return;
+            }
 
             throw new StartupFailureException(DescribeConnectionFailure(ex), ex);
         }

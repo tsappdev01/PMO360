@@ -1,0 +1,248 @@
+@page "/projects/{ProjectId:int}/milestones"
+@attribute [Authorize(Policy = AuthorizationPolicies.Contribute)]
+@rendermode InteractiveServer
+@inject IMilestoneService MilestoneService
+@inject IProjectService ProjectService
+@inject IProjectAccessService Access
+
+@* FR-06. Any number of milestones per project, each with planned date, actual or forecast date,
+   owner, status and completion. BR-07: a milestone that is no longer wanted is cancelled. *@
+
+<PageTitle>Milestones — PMO360</PageTitle>
+
+<div class="page" style="max-width:1200px">
+    <div class="breadcrumb">
+        <a href="/projects">Projects</a><span>·</span>
+        <a href="@($"/projects/{ProjectId}")">@(_projectName ?? "Project")</a><span>·</span>
+        Milestones
+    </div>
+
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">Milestones</h1>
+            <div class="subtitle">@_projectName</div>
+        </div>
+        @if (_canEdit)
+        {
+            <button class="btn primary" @onclick="AddNew">Add a milestone</button>
+        }
+    </div>
+
+    @if (!_canEdit)
+    {
+        <div class="card"><div class="notice">You may view this plan but not change it.</div></div>
+    }
+
+    @if (_editing is not null)
+    {
+        <div class="card">
+            <div class="card-head"><h2>@(_editing.Id == 0 ? "New milestone" : "Amend milestone")</h2></div>
+
+            @if (_error is not null)
+            {
+                <div class="validation" role="alert">@_error</div>
+            }
+
+            <div class="field">
+                <label for="m-name">Milestone</label>
+                <input id="m-name" type="text" value="@_name" @onchange="@(e => _name = e.Value?.ToString() ?? "")" />
+            </div>
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="m-planned">Planned date</label>
+                    <input id="m-planned" type="date" value="@_planned.ToString("yyyy-MM-dd")"
+                           @onchange="@(e => _planned = ParseDate(e.Value) ?? _planned)" />
+                </div>
+                <div class="field">
+                    <label for="m-actual">Actual or forecast date</label>
+                    <input id="m-actual" type="date" value="@_actual?.ToString("yyyy-MM-dd")"
+                           @onchange="@(e => _actual = ParseDate(e.Value))" />
+                </div>
+                <div class="field">
+                    <label for="m-status">Status</label>
+                    <select id="m-status" value="@((int)_status)" @onchange="OnStatusChanged">
+                        <option value="1">Not Started</option>
+                        <option value="2">In Progress</option>
+                        <option value="3">Completed</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="m-completion">Completion %</label>
+                    <input id="m-completion" type="number" min="0" max="100" value="@_completion"
+                           @onchange="@(e => _completion = ParseInt(e.Value))" />
+                </div>
+                <div class="field">
+                    <label for="m-owner">Owner</label>
+                    <input id="m-owner" type="text" value="@_owner" @onchange="@(e => _owner = e.Value?.ToString() ?? "")" />
+                </div>
+            </div>
+
+            <div class="btn-row end">
+                <button class="btn" @onclick="@(() => _editing = null)">Cancel</button>
+                <button class="btn primary" @onclick="SaveAsync" disabled="@_busy">Save milestone</button>
+            </div>
+        </div>
+    }
+
+    <div class="card">
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th scope="col">Milestone</th>
+                        <th scope="col">Planned</th>
+                        <th scope="col">Baseline</th>
+                        <th scope="col">Actual</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Completion</th>
+                        <th scope="col">Owner</th>
+                        <th scope="col"><span class="sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var milestone in _milestones)
+                    {
+                        <tr>
+                            <td><strong>@milestone.Name</strong></td>
+                            <td class="date">@milestone.PlannedDate.ToString("dd-MMM-yy")</td>
+                            <td class="date muted">@(milestone.BaselineDate?.ToString("dd-MMM-yy") ?? "—")</td>
+                            <td class="date">@(milestone.ActualDate?.ToString("dd-MMM-yy") ?? "—")</td>
+                            <td><MilestoneStatusBadge Status="milestone.Status" /></td>
+                            <td class="num">@milestone.CompletionPercent%</td>
+                            <td>@milestone.Owner.DisplayName</td>
+                            <td>
+                                @if (_canEdit && milestone.Status != MilestoneStatus.Cancelled)
+                                {
+                                    <div class="btn-row">
+                                        <button class="btn link" @onclick="@(() => Edit(milestone))">Amend</button>
+                                        <button class="btn link" @onclick="@(() => CancelAsync(milestone.Id))">Cancel</button>
+                                    </div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @if (_milestones.Count == 0)
+            {
+                <div class="empty">No milestones have been recorded for this project.</div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int ProjectId { get; set; }
+
+    private IReadOnlyList<Milestone> _milestones = Array.Empty<Milestone>();
+    private string? _projectName;
+    private bool _canEdit;
+    private bool _busy;
+    private string? _error;
+
+    private Milestone? _editing;
+    private string _name = string.Empty;
+    private DateOnly _planned = DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly? _actual;
+    private MilestoneStatus _status = MilestoneStatus.NotStarted;
+    private int _completion;
+    private string _owner = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var detail = await ProjectService.GetDetailAsync(ProjectId);
+        _projectName = detail?.Project.Name;
+        _canEdit = await Access.CanContributeAsync(ProjectId);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _milestones = await MilestoneService.GetForProjectAsync(ProjectId);
+
+    private void AddNew()
+    {
+        _editing = new Milestone { ProjectId = ProjectId };
+        _name = string.Empty;
+        _planned = DateOnly.FromDateTime(DateTime.Today);
+        _actual = null;
+        _status = MilestoneStatus.NotStarted;
+        _completion = 0;
+        _owner = string.Empty;
+        _error = null;
+    }
+
+    private void Edit(Milestone milestone)
+    {
+        _editing = milestone;
+        _name = milestone.Name;
+        _planned = milestone.PlannedDate;
+        _actual = milestone.ActualDate;
+        _status = milestone.Status;
+        _completion = milestone.CompletionPercent;
+        _owner = milestone.Owner.DisplayName;
+        _error = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_owner))
+        {
+            _error = "A milestone needs a name and an owner.";
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await MilestoneService.SaveAsync(ProjectId, new MilestoneInput(
+                _editing!.Id == 0 ? null : _editing.Id,
+                _name,
+                _planned,
+                _editing.BaselineDate,
+                _actual,
+                _status,
+                _completion,
+                new PersonRef(_owner.Trim())));
+
+            _editing = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CancelAsync(int milestoneId)
+    {
+        await MilestoneService.CancelAsync(milestoneId);
+        await LoadAsync();
+    }
+
+    private void OnStatusChanged(ChangeEventArgs e)
+    {
+        _status = (MilestoneStatus)ParseInt(e.Value);
+
+        // A completed milestone is complete: the form says so before the procedure does.
+        if (_status == MilestoneStatus.Completed)
+        {
+            _completion = 100;
+            _actual ??= DateOnly.FromDateTime(DateTime.Today);
+        }
+    }
+
+    private static DateOnly? ParseDate(object? value) =>
+        DateOnly.TryParse(value?.ToString(), out var date) ? date : null;
+
+    private static int ParseInt(object? value) =>
+        int.TryParse(value?.ToString(), out var parsed) ? parsed : 0;
+}

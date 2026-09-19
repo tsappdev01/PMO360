@@ -1,0 +1,284 @@
+@page "/projects/{ProjectId:int}/risks"
+@attribute [Authorize(Policy = AuthorizationPolicies.Contribute)]
+@rendermode InteractiveServer
+@inject IRiskService RiskService
+@inject IProjectService ProjectService
+@inject IProjectAccessService Access
+
+@* FR-09, FR-10, WF-06. Raising an item at High severity notifies the PMO and the project owner
+   immediately. Closing keeps the record and requires the closure note. *@
+
+<PageTitle>Risks &amp; issues — PMO360</PageTitle>
+
+<div class="page" style="max-width:1200px">
+    <div class="breadcrumb">
+        <a href="/projects">Projects</a><span>·</span>
+        <a href="@($"/projects/{ProjectId}")">@(_projectName ?? "Project")</a><span>·</span>
+        Risks &amp; issues
+    </div>
+
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">Risks &amp; issues</h1>
+            <div class="subtitle">@_projectName</div>
+        </div>
+        @if (_canEdit)
+        {
+            <button class="btn primary" @onclick="AddNew">Raise a new risk or issue</button>
+        }
+    </div>
+
+    @if (_editing)
+    {
+        <div class="card">
+            <div class="card-head"><h2>@(_editId is null ? "New risk or issue" : "Amend")</h2></div>
+
+            @if (_error is not null)
+            {
+                <div class="validation" role="alert">@_error</div>
+            }
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="r-type">Type</label>
+                    <select id="r-type" value="@((int)_type)" @onchange="@(e => _type = (RiskType)ParseInt(e.Value))">
+                        <option value="1">Risk — it may happen</option>
+                        <option value="2">Issue — it has happened</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="r-severity">Severity</label>
+                    <select id="r-severity" value="@((int)_severity)" @onchange="@(e => _severity = (RiskSeverity)ParseInt(e.Value))">
+                        <option value="1">Low</option>
+                        <option value="2">Medium</option>
+                        <option value="3">High</option>
+                    </select>
+                    @if (_severity == RiskSeverity.High)
+                    {
+                        <p class="small" style="color:var(--at-risk);margin:8px 0 0">
+                            High severity notifies the PMO and the project owner immediately (WF-06).
+                        </p>
+                    }
+                </div>
+                <div class="field">
+                    <label for="r-due">Due date</label>
+                    <input id="r-due" type="date" value="@_due?.ToString("yyyy-MM-dd")"
+                           @onchange="@(e => _due = ParseDate(e.Value))" />
+                </div>
+            </div>
+
+            <div class="field">
+                <label for="r-description">Description</label>
+                <textarea id="r-description" style="min-height:72px" value="@_description"
+                          @onchange="@(e => _description = e.Value?.ToString() ?? "")"></textarea>
+            </div>
+
+            <div class="field">
+                <label for="r-mitigation">Mitigation</label>
+                <textarea id="r-mitigation" style="min-height:72px" value="@_mitigation"
+                          @onchange="@(e => _mitigation = e.Value?.ToString())"></textarea>
+            </div>
+
+            <div class="field">
+                <label for="r-owner">Owner</label>
+                <input id="r-owner" type="text" value="@_owner" @onchange="@(e => _owner = e.Value?.ToString() ?? "")" />
+            </div>
+
+            <div class="btn-row end">
+                <button class="btn" @onclick="@(() => _editing = false)">Cancel</button>
+                <button class="btn primary" @onclick="SaveAsync" disabled="@_busy">Save</button>
+            </div>
+        </div>
+    }
+
+    @if (_closingId is not null)
+    {
+        <div class="card">
+            <div class="card-head"><h2>Close this item</h2></div>
+            <div class="field">
+                <label for="closure">Closure note</label>
+                <textarea id="closure" style="min-height:72px" value="@_closureNote"
+                          @onchange="@(e => _closureNote = e.Value?.ToString() ?? "")"></textarea>
+                <p class="small muted" style="margin:8px 0 0">
+                    The item is kept with its note, not deleted (FR-10, BR-07).
+                </p>
+            </div>
+            <div class="btn-row end">
+                <button class="btn" @onclick="@(() => _closingId = null)">Cancel</button>
+                <button class="btn primary" @onclick="CloseAsync" disabled="@_busy">Close item</button>
+            </div>
+        </div>
+    }
+
+    <div class="card">
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th scope="col">Type</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Severity</th>
+                        <th scope="col">Owner</th>
+                        <th scope="col">Mitigation</th>
+                        <th scope="col">Due</th>
+                        <th scope="col">Status</th>
+                        <th scope="col"><span class="sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var risk in _risks)
+                    {
+                        <tr>
+                            <td>@risk.Type</td>
+                            <td style="max-width:34ch">@risk.Description</td>
+                            <td><SeverityBadge Severity="risk.Severity" /></td>
+                            <td>@risk.Owner.DisplayName</td>
+                            <td style="max-width:30ch" class="muted">@(risk.Mitigation ?? "—")</td>
+                            <td class="date">@(risk.DueDate?.ToString("dd-MMM-yy") ?? "—")</td>
+                            <td>
+                                <span class="badge @(risk.IsOpen ? "at-risk" : "neutral")">@risk.Status</span>
+                                @if (!risk.IsOpen && !string.IsNullOrWhiteSpace(risk.ClosureNote))
+                                {
+                                    <div class="small muted">@risk.ClosureNote</div>
+                                }
+                            </td>
+                            <td>
+                                @if (_canEdit && risk.IsOpen)
+                                {
+                                    <div class="btn-row">
+                                        <button class="btn link" @onclick="@(() => Edit(risk))">Amend</button>
+                                        <button class="btn link" @onclick="@(() => StartClose(risk.Id))">Close</button>
+                                    </div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @if (_risks.Count == 0)
+            {
+                <div class="empty">No risks or issues have been raised on this project.</div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int ProjectId { get; set; }
+
+    private IReadOnlyList<RiskIssue> _risks = Array.Empty<RiskIssue>();
+    private string? _projectName;
+    private bool _canEdit;
+    private bool _busy;
+    private string? _error;
+
+    private bool _editing;
+    private int? _editId;
+    private RiskType _type = RiskType.Risk;
+    private RiskSeverity _severity = RiskSeverity.Medium;
+    private string _description = string.Empty;
+    private string? _mitigation;
+    private string _owner = string.Empty;
+    private DateOnly? _due;
+
+    private int? _closingId;
+    private string _closureNote = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var detail = await ProjectService.GetDetailAsync(ProjectId);
+        _projectName = detail?.Project.Name;
+        _canEdit = await Access.CanContributeAsync(ProjectId);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _risks = await RiskService.GetForProjectAsync(ProjectId);
+
+    private void AddNew()
+    {
+        _editing = true;
+        _editId = null;
+        _type = RiskType.Risk;
+        _severity = RiskSeverity.Medium;
+        _description = string.Empty;
+        _mitigation = null;
+        _owner = string.Empty;
+        _due = null;
+        _error = null;
+    }
+
+    private void Edit(RiskIssue risk)
+    {
+        _editing = true;
+        _editId = risk.Id;
+        _type = risk.Type;
+        _severity = risk.Severity;
+        _description = risk.Description;
+        _mitigation = risk.Mitigation;
+        _owner = risk.Owner.DisplayName;
+        _due = risk.DueDate;
+        _error = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_description) || string.IsNullOrWhiteSpace(_owner))
+        {
+            _error = "A risk or issue needs a description and an owner.";
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await RiskService.SaveAsync(ProjectId, new RiskInput(
+                _editId, _type, _description, _severity, new PersonRef(_owner.Trim()), _mitigation, _due));
+
+            _editing = false;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void StartClose(int riskId)
+    {
+        _closingId = riskId;
+        _closureNote = string.Empty;
+    }
+
+    private async Task CloseAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await RiskService.CloseAsync(_closingId!.Value, _closureNote);
+            _closingId = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static DateOnly? ParseDate(object? value) =>
+        DateOnly.TryParse(value?.ToString(), out var date) ? date : null;
+
+    private static int ParseInt(object? value) =>
+        int.TryParse(value?.ToString(), out var parsed) ? parsed : 0;
+}

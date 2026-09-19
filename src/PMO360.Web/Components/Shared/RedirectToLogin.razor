@@ -1,0 +1,15 @@
+@inject NavigationManager Navigation
+
+@code {
+    /// <summary>
+    /// Sends an unauthenticated visitor to Entra ID, remembering where they were going so the
+    /// link in a notification lands on the record rather than on the dashboard.
+    /// </summary>
+    protected override void OnInitialized()
+    {
+        var returnUrl = Uri.EscapeDataString(
+            Navigation.ToBaseRelativePath(Navigation.Uri) is { Length: > 0 } path ? "/" + path : "/");
+
+        Navigation.NavigateTo($"MicrosoftIdentity/Account/SignIn?redirectUri={returnUrl}", forceLoad: true);
+    }
+}

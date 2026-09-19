@@ -1,0 +1,75 @@
+@* FR-17. The portfolio table: project, owner and consultant, status, progress, phase,
+   next milestone, due date and last update. Shared by the dashboard and the Projects page so
+   the two can never disagree about a row. *@
+
+<div class="table-wrap">
+    <table class="data">
+        <thead>
+            <tr>
+                <th scope="col">Project</th>
+                <th scope="col">Owner / Consultant</th>
+                <th scope="col">Status</th>
+                <th scope="col">Progress</th>
+                <th scope="col">Current phase</th>
+                <th scope="col">Next milestone</th>
+                <th scope="col">Due</th>
+                <th scope="col">Updated</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in Rows)
+            {
+                <tr>
+                    <td>
+                        <a class="project-name" href="@($"/projects/{row.ProjectId}")">@row.Name</a>
+                        <div class="project-code">@row.ProjectCode</div>
+                        @if (row.AttentionRequired)
+                        {
+                            <div class="small" style="color:var(--delayed);font-weight:600">Management attention</div>
+                        }
+                        @if (row.OpenHighRisks > 0)
+                        {
+                            <div class="small muted">
+                                @row.OpenHighRisks open high @(row.OpenHighRisks == 1 ? "risk" : "risks")
+                            </div>
+                        }
+                    </td>
+                    <td>
+                        @row.OwnerName
+                        <div class="small muted">@(row.ConsultantName ?? "—")</div>
+                    </td>
+                    <td><StatusBadge Status="row.Status" /></td>
+                    <td style="min-width:170px"><ProgressBar Percent="row.ProgressPercent" Status="row.Status" /></td>
+                    <td>@(row.PhaseName ?? "—")</td>
+                    <td>@(row.NextMilestoneName ?? "—")</td>
+                    <td class="date @(row.NextMilestoneOverdue ? "overdue" : "")">
+                        @(row.NextMilestoneDue?.ToString("dd-MMM-yy") ?? "—")
+                        @if (row.NextMilestoneOverdue)
+                        {
+                            @* FR-08: overdue is flagged in every view, in words as well as colour. *@
+                            <div class="small">Overdue</div>
+                        }
+                    </td>
+                    <td class="date">
+                        @(row.LastUpdateDate?.ToString("dd-MMM") ?? "Never")
+                        @if (row.IsNotReported)
+                        {
+                            @* BR-06: "no news" is not "on track". *@
+                            <div class="small" style="color:var(--at-risk);font-weight:600">Not Reported</div>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @if (Rows.Count == 0)
+    {
+        <div class="empty">@EmptyMessage</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<PortfolioRow> Rows { get; set; } = Array.Empty<PortfolioRow>();
+    [Parameter] public string EmptyMessage { get; set; } = "No projects match this view.";
+}

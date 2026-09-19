@@ -1,0 +1,127 @@
+@* FR-21. Filtering by entity, department, status, priority, owner and consultant, and the
+   standard views of FR-23. Changing any control raises FilterChanged; the page re-queries. *@
+@inject IReferenceDataService Reference
+
+<div class="filters no-print">
+    <div class="filter">
+        <label for="f-view">View</label>
+        <select id="f-view" value="@((int)Filter.View)" @onchange="OnViewChanged">
+            <option value="0">Active projects</option>
+            <option value="1">At risk and delayed</option>
+            <option value="2">Overdue milestones</option>
+            <option value="3">Open high risks</option>
+            <option value="4">Not reported</option>
+            <option value="5">Completed</option>
+            <option value="6">All projects</option>
+        </select>
+    </div>
+
+    <div class="filter">
+        <label for="f-entity">Entity</label>
+        <select id="f-entity" value="@Filter.ReportingEntityId" @onchange="OnEntityChanged">
+            <option value="">All entities</option>
+            @foreach (var entity in _entities)
+            {
+                <option value="@entity.Id">@entity.Name</option>
+            }
+        </select>
+    </div>
+
+    <div class="filter">
+        <label for="f-department">Department</label>
+        <select id="f-department" value="@Filter.DepartmentId" @onchange="OnDepartmentChanged">
+            <option value="">All departments</option>
+            @foreach (var department in _departments)
+            {
+                <option value="@department.Id">@department.Name</option>
+            }
+        </select>
+    </div>
+
+    @if (ShowStatusAndConsultant)
+    {
+        <div class="filter">
+            <label for="f-status">Status</label>
+            <select id="f-status" value="@((int?)Filter.Status)" @onchange="OnStatusChanged">
+                <option value="">Any status</option>
+                @foreach (var status in ProjectStatusRules.All)
+                {
+                    <option value="@((int)status)">@ProjectStatusRules.DisplayName(status)</option>
+                }
+            </select>
+        </div>
+
+        <div class="filter">
+            <label for="f-consultant">Consultant</label>
+            <select id="f-consultant" value="@Filter.ConsultantId" @onchange="OnConsultantChanged">
+                <option value="">All consultants</option>
+                @foreach (var consultant in _consultants)
+                {
+                    <option value="@consultant.Id">@consultant.Name</option>
+                }
+            </select>
+        </div>
+
+        <div class="filter">
+            <label for="f-search">Search</label>
+            @* FR-25. Project name, ID, owner and consultant. *@
+            <input id="f-search" type="search" placeholder="Name, ID, owner or consultant"
+                   value="@Filter.SearchTerm" @onchange="OnSearchChanged" />
+        </div>
+    }
+
+    @if (ShowMyProjects)
+    {
+        <div class="filter">
+            <label for="f-mine">Scope</label>
+            <select id="f-mine" value="@(Filter.MyProjectsOnly ? "1" : "0")" @onchange="OnMineChanged">
+                <option value="0">Everything I can see</option>
+                <option value="1">My projects</option>
+            </select>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PortfolioFilter Filter { get; set; } = new();
+    [Parameter] public EventCallback<PortfolioFilter> FilterChanged { get; set; }
+    [Parameter] public bool ShowStatusAndConsultant { get; set; } = true;
+    [Parameter] public bool ShowMyProjects { get; set; } = true;
+
+    private IReadOnlyList<ReportingEntity> _entities = Array.Empty<ReportingEntity>();
+    private IReadOnlyList<Department> _departments = Array.Empty<Department>();
+    private IReadOnlyList<Consultant> _consultants = Array.Empty<Consultant>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _entities = await Reference.GetEntitiesAsync();
+        _departments = await Reference.GetDepartmentsAsync();
+        _consultants = await Reference.GetConsultantsAsync();
+    }
+
+    private Task Raise(PortfolioFilter updated) => FilterChanged.InvokeAsync(updated);
+
+    private Task OnViewChanged(ChangeEventArgs e) =>
+        Raise(Filter with { View = (PortfolioView)ParseInt(e.Value).GetValueOrDefault() });
+
+    private Task OnEntityChanged(ChangeEventArgs e) =>
+        Raise(Filter with { ReportingEntityId = ParseInt(e.Value) });
+
+    private Task OnDepartmentChanged(ChangeEventArgs e) =>
+        Raise(Filter with { DepartmentId = ParseInt(e.Value) });
+
+    private Task OnStatusChanged(ChangeEventArgs e) =>
+        Raise(Filter with { Status = ParseInt(e.Value) is { } v ? (ProjectStatus)v : null });
+
+    private Task OnConsultantChanged(ChangeEventArgs e) =>
+        Raise(Filter with { ConsultantId = ParseInt(e.Value) });
+
+    private Task OnSearchChanged(ChangeEventArgs e) =>
+        Raise(Filter with { SearchTerm = e.Value?.ToString() });
+
+    private Task OnMineChanged(ChangeEventArgs e) =>
+        Raise(Filter with { MyProjectsOnly = e.Value?.ToString() == "1" });
+
+    private static int? ParseInt(object? value) =>
+        int.TryParse(value?.ToString(), out var parsed) ? parsed : null;
+}

@@ -1,0 +1,22 @@
+<span class="badge @CssClass">@Label</span>
+
+@code {
+    [Parameter, EditorRequired] public MilestoneStatus Status { get; set; }
+
+    private string Label => Status switch
+    {
+        MilestoneStatus.NotStarted => "Not Started",
+        MilestoneStatus.InProgress => "In Progress",
+        MilestoneStatus.Completed => "Completed",
+        MilestoneStatus.Cancelled => "Cancelled",
+        _ => Status.ToString()
+    };
+
+    private string CssClass => Status switch
+    {
+        MilestoneStatus.Completed => "completed",
+        MilestoneStatus.InProgress => "on-track",
+        MilestoneStatus.Cancelled => "neutral",
+        _ => "neutral"
+    };
+}

@@ -1,0 +1,208 @@
+@page "/admin/projects/new"
+@attribute [Authorize(Policy = AuthorizationPolicies.Administer)]
+@rendermode InteractiveServer
+@inject IProjectService ProjectService
+@inject IReferenceDataService Reference
+@inject NavigationManager Navigation
+
+@* AC-01. A project can be created by the PMO with all mandatory fields and a unique project ID,
+   against the correct Group entity. The ID is allocated by the database, not typed. *@
+
+<PageTitle>New project — PMO360</PageTitle>
+
+<div class="page" style="max-width:940px">
+    <div class="breadcrumb"><a href="/admin">Administration</a><span>·</span>New project</div>
+    <h1 class="page-title">New project</h1>
+    <p class="subtitle">
+        The project ID is issued automatically. The project starts On Track at 0%, and its position
+        changes only when its manager submits an update.
+    </p>
+
+    <div class="card">
+        @if (_error is not null)
+        {
+            <div class="validation" role="alert">@_error</div>
+        }
+
+        <div class="field">
+            <label for="name">Project name</label>
+            <input id="name" type="text" value="@_name" @onchange="@(e => _name = e.Value?.ToString() ?? "")" />
+        </div>
+
+        <div class="field">
+            <label for="description">Description</label>
+            <textarea id="description" style="min-height:72px" value="@_description"
+                      @onchange="@(e => _description = e.Value?.ToString())"></textarea>
+        </div>
+
+        <div class="field-row">
+            <div class="field">
+                <label for="entity">Reporting entity</label>
+                <select id="entity" value="@_entityId" @onchange="@(e => _entityId = ParseInt(e.Value))">
+                    <option value="0">Select…</option>
+                    @foreach (var entity in _entities)
+                    {
+                        <option value="@entity.Id">@entity.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label for="department">Department</label>
+                <select id="department" value="@_departmentId" @onchange="@(e => _departmentId = ParseInt(e.Value))">
+                    <option value="0">Select…</option>
+                    @foreach (var department in _departments)
+                    {
+                        <option value="@department.Id">@department.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label for="consultant">Consultant / vendor</label>
+                <select id="consultant" value="@_consultantId" @onchange="@(e => _consultantId = ParseInt(e.Value))">
+                    <option value="0">Not appointed</option>
+                    @foreach (var consultant in _consultants)
+                    {
+                        <option value="@consultant.Id">@consultant.Name</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <div class="field-row">
+            <div class="field">
+                <label for="owner">Project owner</label>
+                <input id="owner" type="text" value="@_owner" @onchange="@(e => _owner = e.Value?.ToString() ?? "")" />
+            </div>
+            <div class="field">
+                <label for="business-owner">Business owner</label>
+                <input id="business-owner" type="text" value="@_businessOwner"
+                       @onchange="@(e => _businessOwner = e.Value?.ToString() ?? "")" />
+            </div>
+            <div class="field">
+                <label for="manager">Project manager</label>
+                <input id="manager" type="text" value="@_manager" @onchange="@(e => _manager = e.Value?.ToString() ?? "")" />
+            </div>
+            <div class="field">
+                <label for="sponsor">Sponsor <span class="hint">— receives delay escalations</span></label>
+                <input id="sponsor" type="text" value="@_sponsor" @onchange="@(e => _sponsor = e.Value?.ToString() ?? "")" />
+            </div>
+        </div>
+
+        <div class="field-row">
+            <div class="field">
+                <label for="priority">Priority</label>
+                <select id="priority" value="@((int)_priority)" @onchange="@(e => _priority = (ProjectPriority)ParseInt(e.Value))">
+                    <option value="1">Low</option>
+                    <option value="2">Medium</option>
+                    <option value="3">High</option>
+                    <option value="4">Critical</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="phase">Opening phase</label>
+                <select id="phase" value="@_phaseId" @onchange="@(e => _phaseId = ParseInt(e.Value))">
+                    <option value="0">Not set</option>
+                    @foreach (var phase in _phases)
+                    {
+                        <option value="@phase.Id">@phase.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label for="start">Start date</label>
+                <input id="start" type="date" value="@_start.ToString("yyyy-MM-dd")"
+                       @onchange="@(e => _start = ParseDate(e.Value) ?? _start)" />
+            </div>
+            <div class="field">
+                <label for="target">Target completion</label>
+                <input id="target" type="date" value="@_target.ToString("yyyy-MM-dd")"
+                       @onchange="@(e => _target = ParseDate(e.Value) ?? _target)" />
+            </div>
+        </div>
+
+        <div class="btn-row end">
+            <a class="btn" href="/admin">Cancel</a>
+            <button class="btn primary" @onclick="CreateAsync" disabled="@_busy">Create project</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private IReadOnlyList<ReportingEntity> _entities = Array.Empty<ReportingEntity>();
+    private IReadOnlyList<Department> _departments = Array.Empty<Department>();
+    private IReadOnlyList<Phase> _phases = Array.Empty<Phase>();
+    private IReadOnlyList<Consultant> _consultants = Array.Empty<Consultant>();
+
+    private string _name = string.Empty;
+    private string? _description;
+    private int _entityId;
+    private int _departmentId;
+    private int _consultantId;
+    private int _phaseId;
+    private string _owner = string.Empty;
+    private string _businessOwner = string.Empty;
+    private string _manager = string.Empty;
+    private string _sponsor = string.Empty;
+    private ProjectPriority _priority = ProjectPriority.Medium;
+    private DateOnly _start = DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly _target = DateOnly.FromDateTime(DateTime.Today).AddMonths(6);
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _entities = await Reference.GetEntitiesAsync();
+        _departments = await Reference.GetDepartmentsAsync();
+        _phases = await Reference.GetPhasesAsync();
+        _consultants = await Reference.GetConsultantsAsync();
+    }
+
+    private async Task CreateAsync()
+    {
+        // AC-01 asks for all mandatory fields, so the form refuses before the procedure has to.
+        if (string.IsNullOrWhiteSpace(_name) || _entityId == 0 || _departmentId == 0
+            || string.IsNullOrWhiteSpace(_owner) || string.IsNullOrWhiteSpace(_businessOwner)
+            || string.IsNullOrWhiteSpace(_manager) || string.IsNullOrWhiteSpace(_sponsor))
+        {
+            _error = "Name, entity, department, project owner, business owner, project manager and sponsor are all required.";
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            var project = await ProjectService.CreateAsync(new CreateProjectRequest(
+                _name,
+                _description,
+                _entityId,
+                _departmentId,
+                _consultantId == 0 ? null : _consultantId,
+                new PersonRef(_owner.Trim()),
+                new PersonRef(_businessOwner.Trim()),
+                new PersonRef(_manager.Trim()),
+                new PersonRef(_sponsor.Trim()),
+                _priority,
+                _start,
+                _target,
+                _phaseId == 0 ? null : _phaseId));
+
+            Navigation.NavigateTo($"/projects/{project.Id}");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static DateOnly? ParseDate(object? value) =>
+        DateOnly.TryParse(value?.ToString(), out var date) ? date : null;
+
+    private static int ParseInt(object? value) =>
+        int.TryParse(value?.ToString(), out var parsed) ? parsed : 0;
+}

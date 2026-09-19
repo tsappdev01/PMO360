@@ -1,0 +1,101 @@
+@page "/reports"
+@attribute [Authorize(Policy = AuthorizationPolicies.PortalUser)]
+@rendermode InteractiveServer
+@inject IProjectService Projects
+@inject Microsoft.Extensions.Options.IOptions<PortalOptions> PortalOptions
+
+@* Section 5.4. The operational views live in the portal; the executive layer is Power BI,
+   reading the same data through the views in db/020_views_powerbi.sql. *@
+
+<PageTitle>Reports — PMO360</PageTitle>
+
+<div class="page">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">Reports</h1>
+            <div class="subtitle">Operational views and exports. Executive reporting is in Power BI.</div>
+        </div>
+        <a class="btn" href="/export/portfolio?view=0">Export the portfolio to Excel</a>
+    </div>
+
+    <div class="card">
+        <div class="card-head">
+            <h2>Reporting compliance</h2>
+            <div class="note">Projects updated within @PortalOptions.Value.UpdateCycleDays days</div>
+        </div>
+        @if (_compliance is not null)
+        {
+            <div class="grid grid-3">
+                <SummaryCard Label="Active projects" Value="@_compliance.ActiveProjects.ToString()" />
+                <SummaryCard Label="Reported in cycle" Value="@_compliance.ReportedInCycle.ToString()" Tone="on-track"
+                             Foot="@($"{_compliance.CompliancePercent}% compliance")" />
+                <SummaryCard Label="Not reported" Value="@_compliance.NotReported.ToString()" Tone="at-risk"
+                             Foot="No update inside the cycle" />
+            </div>
+        }
+    </div>
+
+    @* BR-06. "No news" separated from "on track". *@
+    <div class="card">
+        <div class="card-head">
+            <h2>Projects not reported</h2>
+            <div class="note">@_notReported.Count project(s)</div>
+        </div>
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th scope="col">Project</th>
+                        <th scope="col">Owner</th>
+                        <th scope="col">Last recorded status</th>
+                        <th scope="col">Last update</th>
+                        <th scope="col">Days</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _notReported)
+                    {
+                        <tr>
+                            <td>
+                                <a class="project-name" href="@($"/projects/{row.ProjectId}")">@row.ProjectName</a>
+                                <div class="project-code">@row.ProjectCode</div>
+                            </td>
+                            <td>@row.OwnerName</td>
+                            <td><StatusBadge Status="row.Status" /></td>
+                            <td class="date">@(row.LastUpdateDate?.ToString("dd-MMM-yyyy") ?? "Never")</td>
+                            <td class="num"><strong>@row.DaysSinceUpdate</strong></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @if (_notReported.Count == 0)
+            {
+                <div class="empty">Every active project has reported inside the cycle.</div>
+            }
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-head"><h2>Power BI</h2></div>
+        <p class="muted" style="max-width:80ch">
+            The executive report reads the same records as this portal, through the reporting views
+            <code>pmo.vw_Project</code>, <code>pmo.vw_Milestone</code>, <code>pmo.vw_RiskIssue</code> and
+            <code>pmo.vw_ProjectUpdate</code>. No figure is maintained inside the report, which is why
+            it reconciles to this dashboard (AC-11). Connect the dataset to the PMO360 database with the
+            read-only Power BI principal and set a scheduled refresh; the report shows its last refresh
+            time on every page.
+        </p>
+    </div>
+</div>
+
+@code {
+    private ReportingCompliance? _compliance;
+    private IReadOnlyList<NotReportedRow> _notReported = Array.Empty<NotReportedRow>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var filter = new PortfolioFilter();
+        _compliance = await Projects.GetReportingComplianceAsync(filter);
+        _notReported = await Projects.GetNotReportedAsync(filter);
+    }
+}

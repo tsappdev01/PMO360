@@ -1,0 +1,24 @@
+<div class="bar">
+    <div class="track" role="progressbar" aria-valuenow="@Percent" aria-valuemin="0" aria-valuemax="100"
+         aria-label="@($"Progress {Percent} per cent")">
+        <div class="fill @CssClass" style="width:@(Percent)%"></div>
+    </div>
+    <span class="pct">@Percent%</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public int Percent { get; set; }
+
+    /// <summary>The bar takes the project's status colour, so the table reads in one glance.</summary>
+    [Parameter] public ProjectStatus Status { get; set; } = ProjectStatus.OnTrack;
+
+    private string CssClass => Status switch
+    {
+        ProjectStatus.OnTrack => "on-track",
+        ProjectStatus.AtRisk => "at-risk",
+        ProjectStatus.Delayed => "delayed",
+        ProjectStatus.OnHold => "on-hold",
+        ProjectStatus.Completed => "completed",
+        _ => "on-track"
+    };
+}

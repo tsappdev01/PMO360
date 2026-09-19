@@ -1,0 +1,12 @@
+<span class="badge @CssClass">@Severity</span>
+
+@code {
+    [Parameter, EditorRequired] public RiskSeverity Severity { get; set; }
+
+    private string CssClass => Severity switch
+    {
+        RiskSeverity.High => "high",
+        RiskSeverity.Medium => "medium",
+        _ => "low"
+    };
+}

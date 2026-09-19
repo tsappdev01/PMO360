@@ -1,0 +1,77 @@
+@page "/milestones"
+@attribute [Authorize(Policy = AuthorizationPolicies.PortalUser)]
+@rendermode InteractiveServer
+@inject IProjectService Projects
+
+@* FR-23. The overdue milestones view, across the portfolio the caller can see (FR-08). *@
+
+<PageTitle>Milestones — PMO360</PageTitle>
+
+<div class="page">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">Overdue milestones</h1>
+            <div class="subtitle">
+                Milestones past their planned date and not complete. @_rows.Count in this view.
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <PortfolioFilters Filter="_filter" FilterChanged="OnFilterChanged" ShowStatusAndConsultant="false" ShowMyProjects="false" />
+    </div>
+
+    <div class="card">
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th scope="col">Project</th>
+                        <th scope="col">Milestone</th>
+                        <th scope="col">Planned</th>
+                        <th scope="col">Baseline</th>
+                        <th scope="col">Days overdue</th>
+                        <th scope="col">Completion</th>
+                        <th scope="col">Owner</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _rows)
+                    {
+                        <tr>
+                            <td>
+                                <a class="project-name" href="@($"/projects/{row.ProjectId}")">@row.ProjectName</a>
+                                <div class="project-code">@row.ProjectCode</div>
+                            </td>
+                            <td>@row.MilestoneName</td>
+                            <td class="date overdue">@row.PlannedDate.ToString("dd-MMM-yy")</td>
+                            <td class="date muted">@(row.BaselineDate?.ToString("dd-MMM-yy") ?? "—")</td>
+                            <td class="num"><strong style="color:var(--delayed)">@row.DaysOverdue</strong></td>
+                            <td style="min-width:150px"><ProgressBar Percent="row.CompletionPercent" Status="ProjectStatus.Delayed" /></td>
+                            <td>@row.OwnerName</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @if (_rows.Count == 0)
+            {
+                <div class="empty">No milestone is overdue. </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private PortfolioFilter _filter = new();
+    private IReadOnlyList<OverdueMilestoneRow> _rows = Array.Empty<OverdueMilestoneRow>();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task OnFilterChanged(PortfolioFilter filter)
+    {
+        _filter = filter;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _rows = await Projects.GetOverdueMilestonesAsync(_filter);
+}

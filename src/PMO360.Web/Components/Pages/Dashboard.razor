@@ -1,0 +1,173 @@
+@page "/"
+@attribute [Authorize(Policy = AuthorizationPolicies.PortalUser)]
+@rendermode InteractiveServer
+@inject IDashboardService DashboardService
+@inject Microsoft.Extensions.Options.IOptions<PortalOptions> PortalOptions
+
+@* Screen 1 — the management dashboard. Read-only throughout: nothing on this page is typed or
+   maintained by hand, and every figure comes from the register beneath it (AC-04). *@
+
+<PageTitle>Dashboard — PMO360</PageTitle>
+
+<div class="page">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">Management Dashboard</h1>
+            <div class="subtitle">
+                @if (_model is not null)
+                {
+                    <text>Portfolio position as at @_model.AsAt.ToString("dd-MMM-yyyy") · Updated automatically as project managers submit</text>
+                }
+            </div>
+        </div>
+        <PortfolioFilters Filter="_filter" FilterChanged="OnFilterChanged" ShowStatusAndConsultant="false" />
+    </div>
+
+    @if (_model is null)
+    {
+        <div class="card"><div class="empty">Loading the portfolio…</div></div>
+    }
+    else
+    {
+        @* FR-16. The six summary indicators. *@
+        <div class="grid grid-6" style="margin-bottom:20px">
+            <SummaryCard Label="Active projects" Value="@_model.Summary.ActiveProjects.ToString()"
+                         Foot="@($"{_model.Summary.CompletedThisFinancialYear} completed this FY")" />
+            <SummaryCard Label="On track" Value="@_model.Summary.OnTrack.ToString()" Tone="on-track"
+                         Foot="@($"{_model.Summary.OnTrackPercent}% of portfolio")" />
+            <SummaryCard Label="At risk" Value="@_model.Summary.AtRisk.ToString()" Tone="at-risk"
+                         Foot="@($"{_model.Summary.AtRiskRaisedThisWeek} raised this week")" />
+            <SummaryCard Label="Delayed" Value="@_model.Summary.Delayed.ToString()" Tone="delayed"
+                         Foot="Escalated to sponsors" />
+            <SummaryCard Label="Average progress" Value="@($"{_model.Summary.AverageProgress}%")"
+                         Foot="Across active projects" />
+            <SummaryCard Label="Needs attention" Value="@_model.Summary.NeedsAttention.ToString()"
+                         Foot="Flagged by project managers" />
+        </div>
+
+        @* FR-17. The portfolio table. *@
+        <div class="card">
+            <div class="card-head">
+                <h2>Project status</h2>
+                <div class="note">
+                    @_model.Portfolio.Count of @_model.PortfolioTotal shown
+                    <a href="/projects" style="margin-left:12px;font-weight:600">View all projects</a>
+                </div>
+            </div>
+            <PortfolioTable Rows="_model.Portfolio" />
+        </div>
+
+        <div class="grid grid-3">
+            @* Portfolio by status, drawn proportional to the active portfolio. *@
+            <div class="card">
+                <div class="card-head"><h2>Portfolio by status</h2></div>
+                <div class="status-bars">
+                    @foreach (var bar in _model.StatusBars)
+                    {
+                        <div class="row">
+                            <div class="name">@bar.Label</div>
+                            <div class="count">@bar.Count</div>
+                            <div class="track">
+                                <div class="fill @FillClass(bar.Status)" style="width:@(bar.PercentOfActive)%"></div>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <p class="small muted" style="margin:14px 0 0">
+                    Bars are proportional to the @_model.Summary.ActiveProjects active projects.
+                </p>
+            </div>
+
+            @* FR-20. Milestones due in the rolling window. *@
+            <div class="card">
+                <div class="card-head">
+                    <h2>Upcoming milestones</h2>
+                    <div class="note">Next @_model.UpcomingWindowDays days</div>
+                </div>
+                <div class="timeline">
+                    @foreach (var milestone in _model.UpcomingMilestones)
+                    {
+                        <div class="item">
+                            <div class="when @(milestone.IsOverdue ? "overdue" : "")">
+                                @milestone.PlannedDate.ToString("dd-MMM")
+                            </div>
+                            <div>
+                                <div class="what">@milestone.MilestoneName</div>
+                                <div class="who">
+                                    <a href="@($"/projects/{milestone.ProjectId}")">@milestone.ProjectName</a>
+                                    · @milestone.OwnerName
+                                    @if (milestone.IsOverdue)
+                                    {
+                                        <strong style="color:var(--delayed)"> · Overdue</strong>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+                @if (_model.UpcomingMilestones.Count == 0)
+                {
+                    <div class="empty">No milestone falls in the next @_model.UpcomingWindowDays days.</div>
+                }
+            </div>
+
+            @* FR-20. The items flagged for a management decision, with the reason given (BR-03). *@
+            <div class="card">
+                <div class="card-head">
+                    <h2>Management attention</h2>
+                    @if (_model.AttentionItems.Count > 0)
+                    {
+                        <span class="pill-count">@_model.AttentionItems.Count open</span>
+                    }
+                </div>
+                <div class="attention-list">
+                    @foreach (var item in _model.AttentionItems)
+                    {
+                        <div class="attention @AttentionClass(item.Status)">
+                            <div class="title">
+                                <a href="@($"/projects/{item.ProjectId}")">@item.ProjectName</a>
+                                <span class="project-code"> @item.ProjectCode</span>
+                            </div>
+                            <div class="reason">@item.Reason</div>
+                        </div>
+                    }
+                </div>
+                @if (_model.AttentionItems.Count == 0)
+                {
+                    <div class="empty">Nothing is waiting on a management decision.</div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private DashboardModel? _model;
+    private PortfolioFilter _filter = new();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task OnFilterChanged(PortfolioFilter filter)
+    {
+        _filter = filter;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _model = await DashboardService.GetDashboardAsync(_filter);
+
+    private static string FillClass(ProjectStatus status) => status switch
+    {
+        ProjectStatus.OnTrack => "on-track",
+        ProjectStatus.AtRisk => "at-risk",
+        ProjectStatus.Delayed => "delayed",
+        ProjectStatus.OnHold => "on-hold",
+        _ => "completed"
+    };
+
+    private static string AttentionClass(ProjectStatus status) => status switch
+    {
+        ProjectStatus.Delayed => "delayed",
+        ProjectStatus.AtRisk => "at-risk",
+        _ => ""
+    };
+}

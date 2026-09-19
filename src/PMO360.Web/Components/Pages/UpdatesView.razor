@@ -1,0 +1,77 @@
+@page "/updates"
+@attribute [Authorize(Policy = AuthorizationPolicies.PortalUser)]
+@rendermode InteractiveServer
+@inject IUpdateService Updates
+
+@* FR-14. What has been submitted across the portfolio, newest first. Submitted updates are
+   read-only: a correction is a later update (FR-13). *@
+
+<PageTitle>Updates — PMO360</PageTitle>
+
+<div class="page">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">Recent updates</h1>
+            <div class="subtitle">
+                Submitted updates are read-only. A correction is made by submitting a later update.
+            </div>
+        </div>
+        <AuthorizeView Policy="@AuthorizationPolicies.Contribute">
+            <a class="btn accent" href="/updates/submit">Update a project</a>
+        </AuthorizeView>
+    </div>
+
+    <div class="card">
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th scope="col">Submitted</th>
+                        <th scope="col">Project</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Progress</th>
+                        <th scope="col">Key update</th>
+                        <th scope="col">Attention</th>
+                        <th scope="col">By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in _updates)
+                    {
+                        <tr>
+                            <td class="date">@entry.SubmittedOn.ToString("dd-MMM HH:mm")</td>
+                            <td>
+                                <a class="project-name" href="@($"/projects/{entry.ProjectId}")">@entry.Project?.Name</a>
+                                <div class="project-code">@entry.Project?.ProjectCode</div>
+                            </td>
+                            <td><StatusBadge Status="entry.Status" /></td>
+                            <td class="num">@entry.ProgressPercent%</td>
+                            <td style="max-width:48ch">@(entry.KeyUpdate ?? "—")</td>
+                            <td>
+                                @if (entry.AttentionRequired)
+                                {
+                                    <strong style="color:var(--delayed)">Yes</strong>
+                                }
+                                else
+                                {
+                                    <span class="muted">No</span>
+                                }
+                            </td>
+                            <td>@entry.SubmittedBy.DisplayName</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @if (_updates.Count == 0)
+            {
+                <div class="empty">No updates have been submitted yet.</div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private IReadOnlyList<ProjectUpdate> _updates = Array.Empty<ProjectUpdate>();
+
+    protected override async Task OnInitializedAsync() => _updates = await Updates.GetRecentAsync(50);
+}

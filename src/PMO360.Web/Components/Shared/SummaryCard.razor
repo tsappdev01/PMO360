@@ -1,0 +1,15 @@
+@* FR-16. One of the six indicators across the top of the dashboard. *@
+<div class="stat">
+    <div class="label">@Label</div>
+    <div class="value @Tone">@Value</div>
+    <div class="foot">@Foot</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+    [Parameter] public string? Foot { get; set; }
+
+    /// <summary>"on-track", "at-risk" or "delayed" to colour the figure; empty for the plain ones.</summary>
+    [Parameter] public string Tone { get; set; } = string.Empty;
+}

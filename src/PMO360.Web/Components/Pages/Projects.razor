@@ -1,0 +1,91 @@
+@page "/projects"
+@attribute [Authorize(Policy = AuthorizationPolicies.PortalUser)]
+@rendermode InteractiveServer
+@inject IProjectService ProjectService
+@inject Microsoft.Extensions.Options.IOptions<PortalOptions> PortalOptions
+@inject NavigationManager Navigation
+
+@* FR-17, FR-21, FR-23, FR-25. The full register, with the standard views and the filters.
+   FR-24: exportable to Excel for meeting papers. *@
+
+<PageTitle>Projects — PMO360</PageTitle>
+
+<div class="page">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">Projects</h1>
+            <div class="subtitle">@_total project(s) in this view</div>
+        </div>
+        <div class="btn-row">
+            <a class="btn" href="@ExportUrl">Export to Excel</a>
+            <AuthorizeView Policy="@AuthorizationPolicies.Administer">
+                <a class="btn primary" href="/admin/projects/new">New project</a>
+            </AuthorizeView>
+        </div>
+    </div>
+
+    <div class="card">
+        <PortfolioFilters Filter="_filter" FilterChanged="OnFilterChanged" />
+    </div>
+
+    <div class="card">
+        <PortfolioTable Rows="_rows" />
+
+        @if (_total > _rows.Count)
+        {
+            <div class="btn-row" style="margin-top:16px">
+                <button class="btn" disabled="@(_skip == 0)" @onclick="PreviousPage">Previous</button>
+                <span class="small muted">
+                    Showing @(_skip + 1)–@(_skip + _rows.Count) of @_total
+                </span>
+                <button class="btn" disabled="@(_skip + _rows.Count >= _total)" @onclick="NextPage">Next</button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private PortfolioFilter _filter = new();
+    private IReadOnlyList<PortfolioRow> _rows = Array.Empty<PortfolioRow>();
+    private int _total;
+    private int _skip;
+
+    private int PageSize => PortalOptions.Value.ListPageSize;
+
+    private string ExportUrl =>
+        $"/export/portfolio?view={(int)_filter.View}"
+        + (_filter.ReportingEntityId is { } e ? $"&entity={e}" : "")
+        + (_filter.DepartmentId is { } d ? $"&department={d}" : "")
+        + (_filter.Status is { } s ? $"&status={(int)s}" : "")
+        + (_filter.ConsultantId is { } c ? $"&consultant={c}" : "")
+        + (_filter.MyProjectsOnly ? "&mine=true" : "")
+        + (string.IsNullOrWhiteSpace(_filter.SearchTerm) ? "" : $"&search={Uri.EscapeDataString(_filter.SearchTerm)}");
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task OnFilterChanged(PortfolioFilter filter)
+    {
+        _filter = filter;
+        _skip = 0;   // A new filter starts at the first page, not wherever the last one ended.
+        await LoadAsync();
+    }
+
+    private async Task NextPage()
+    {
+        _skip += PageSize;
+        await LoadAsync();
+    }
+
+    private async Task PreviousPage()
+    {
+        _skip = Math.Max(0, _skip - PageSize);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var page = await ProjectService.GetPortfolioAsync(_filter, _skip, PageSize);
+        _rows = page.Rows;
+        _total = page.Total;
+    }
+}

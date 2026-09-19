@@ -1,0 +1,93 @@
+@page "/risks"
+@attribute [Authorize(Policy = AuthorizationPolicies.PortalUser)]
+@rendermode InteractiveServer
+@inject IProjectService Projects
+
+@* FR-23. The risk and issue register across the portfolio, with the "open high risks" view. *@
+
+<PageTitle>Risks &amp; issues — PMO360</PageTitle>
+
+<div class="page">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">Risks &amp; issues</h1>
+            <div class="subtitle">@_rows.Count item(s) in this view</div>
+        </div>
+        <div class="filters no-print">
+            <div class="filter">
+                <label for="scope">Show</label>
+                <select id="scope" value="@(_openHighOnly ? "high" : "all")" @onchange="OnScopeChanged">
+                    <option value="all">All risks and issues</option>
+                    <option value="high">Open high severity only</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <PortfolioFilters Filter="_filter" FilterChanged="OnFilterChanged" ShowStatusAndConsultant="false" ShowMyProjects="false" />
+    </div>
+
+    <div class="card">
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th scope="col">Project</th>
+                        <th scope="col">Type</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Severity</th>
+                        <th scope="col">Owner</th>
+                        <th scope="col">Mitigation</th>
+                        <th scope="col">Due</th>
+                        <th scope="col">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _rows)
+                    {
+                        <tr>
+                            <td>
+                                <a class="project-name" href="@($"/projects/{row.ProjectId}")">@row.ProjectName</a>
+                                <div class="project-code">@row.ProjectCode</div>
+                            </td>
+                            <td>@row.Type</td>
+                            <td style="max-width:36ch">@row.Description</td>
+                            <td><SeverityBadge Severity="row.Severity" /></td>
+                            <td>@row.OwnerName</td>
+                            <td style="max-width:32ch" class="muted">@(row.Mitigation ?? "—")</td>
+                            <td class="date @(row.IsOverdue ? "overdue" : "")">@(row.DueDate?.ToString("dd-MMM-yy") ?? "—")</td>
+                            <td><span class="badge @(row.Status == RiskStatus.Open ? "at-risk" : "neutral")">@row.Status</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @if (_rows.Count == 0)
+            {
+                <div class="empty">No risks or issues match this view.</div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private PortfolioFilter _filter = new();
+    private IReadOnlyList<RiskRow> _rows = Array.Empty<RiskRow>();
+    private bool _openHighOnly;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task OnFilterChanged(PortfolioFilter filter)
+    {
+        _filter = filter;
+        await LoadAsync();
+    }
+
+    private async Task OnScopeChanged(ChangeEventArgs e)
+    {
+        _openHighOnly = e.Value?.ToString() == "high";
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _rows = await Projects.GetRisksAsync(_filter, _openHighOnly);
+}

@@ -1,0 +1,18 @@
+@* FR-18. The status is always stated in words; the colour repeats it, and never replaces it. *@
+<span class="badge @CssClass" title="@ProjectStatusRules.Definition(Status)">
+    <span class="dot" aria-hidden="true"></span>@ProjectStatusRules.DisplayName(Status)
+</span>
+
+@code {
+    [Parameter, EditorRequired] public ProjectStatus Status { get; set; }
+
+    private string CssClass => Status switch
+    {
+        ProjectStatus.OnTrack => "on-track",
+        ProjectStatus.AtRisk => "at-risk",
+        ProjectStatus.Delayed => "delayed",
+        ProjectStatus.OnHold => "on-hold",
+        ProjectStatus.Completed => "completed",
+        _ => "neutral"
+    };
+}

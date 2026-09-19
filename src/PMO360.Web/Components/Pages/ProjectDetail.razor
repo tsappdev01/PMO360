@@ -1,0 +1,360 @@
+@page "/projects/{ProjectId:int}"
+@attribute [Authorize(Policy = AuthorizationPolicies.PortalUser)]
+@rendermode InteractiveServer
+@inject IProjectService Projects
+@inject IProjectAccessService Access
+
+@* Screen 2 — the project detail page. FR-19 / AC-05: overview and progress, the milestone plan
+   with planned against actual dates, the risk and issue register, and the full update history
+   showing how the project reached its current position. *@
+
+<PageTitle>@(_model?.Project.Name ?? "Project") — PMO360</PageTitle>
+
+<div class="page">
+    @if (_model is null)
+    {
+        <div class="card">
+            <div class="empty">
+                @if (_loaded)
+                {
+                    <text>This project does not exist, or it is not one you have access to.</text>
+                }
+                else
+                {
+                    <text>Loading…</text>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        var project = _model.Project;
+
+        <div class="breadcrumb no-print">
+            <a href="/">Dashboard</a><span>·</span>
+            <a href="/projects">Projects</a><span>·</span>
+            @project.Name
+        </div>
+
+        <div class="card">
+            <div class="page-head" style="margin:0">
+                <div>
+                    <h1 class="page-title" style="display:inline">@project.Name</h1>
+                    <span class="project-code" style="margin-left:10px">@project.ProjectCode</span>
+                    <div style="margin-top:10px" class="btn-row">
+                        <StatusBadge Status="project.Status" />
+                        <span class="badge neutral">Priority: @project.Priority</span>
+                        @if (_model.IsNotReported)
+                        {
+                            <span class="badge at-risk">Not Reported</span>
+                        }
+                        @if (!project.IsActive)
+                        {
+                            <span class="badge neutral">Closed</span>
+                        }
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(project.Description))
+                    {
+                        <p class="muted" style="max-width:70ch;margin:14px 0 0">@project.Description</p>
+                    }
+                </div>
+                <div style="text-align:right">
+                    <div class="btn-row end no-print">
+                        @if (_canContribute)
+                        {
+                            <a class="btn primary" href="@($"/updates/submit/{project.Id}")">Submit update</a>
+                        }
+                        @* FR-24. The one-page status report is this page, printed. *@
+                        <button class="btn" @onclick="PrintAsync">Export status report</button>
+                    </div>
+                    <div class="small muted" style="margin-top:10px">
+                        @if (project.LastUpdateDate is { } last)
+                        {
+                            <text>Last updated @last.ToString("dd-MMM-yyyy") by @(project.LastUpdatedBy?.DisplayName ?? "—")</text>
+                        }
+                        else
+                        {
+                            <text>No update has been submitted yet</text>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h2>Project overview</h2></div>
+            <div class="overview">
+                <div><div class="label">Project owner</div><div class="value">@project.ProjectOwner.DisplayName</div></div>
+                <div><div class="label">Consultant / vendor</div><div class="value">@(project.Consultant?.Name ?? "Not appointed")</div></div>
+                <div><div class="label">Project manager</div><div class="value">@project.ProjectManager.DisplayName</div></div>
+                <div><div class="label">Business owner</div><div class="value">@project.BusinessOwner.DisplayName</div></div>
+                <div><div class="label">Start date</div><div class="value date">@project.StartDate.ToString("dd-MMM-yyyy")</div></div>
+                <div><div class="label">Target completion</div><div class="value date">@project.TargetCompletionDate.ToString("dd-MMM-yyyy")</div></div>
+                <div><div class="label">Current phase</div><div class="value">@(project.CurrentPhase?.Name ?? "Not set")</div></div>
+                <div><div class="label">Entity / department</div><div class="value">@(project.ReportingEntity?.Name) · @(project.Department?.Name)</div></div>
+            </div>
+
+            <div style="margin-top:22px;display:flex;align-items:center;gap:16px">
+                <div class="label" style="flex:0 0 auto">Overall progress</div>
+                <div style="flex:1 1 auto"><ProgressBar Percent="project.ProgressPercent" Status="project.Status" /></div>
+            </div>
+
+            @if (project.AttentionRequired && !string.IsNullOrWhiteSpace(project.AttentionReason))
+            {
+                <div class="attention delayed" style="margin-top:18px">
+                    <div class="title">Management attention requested</div>
+                    <div class="reason">@project.AttentionReason</div>
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(project.KeyUpdate))
+            {
+                <div style="margin-top:18px">
+                    <div class="label">Key update</div>
+                    <div class="value">@project.KeyUpdate</div>
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(project.NextAction))
+            {
+                <div style="margin-top:14px">
+                    <div class="label">Next action</div>
+                    <div class="value">
+                        @project.NextAction
+                        @if (project.NextActionOwner is { } owner)
+                        {
+                            <span class="muted"> — @owner.DisplayName</span>
+                        }
+                        @if (project.NextActionDueDate is { } due)
+                        {
+                            <span class="muted"> (due @due.ToString("dd-MMM-yyyy"))</span>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* FR-06, FR-07, FR-08. The milestone plan, planned against actual. *@
+        <div class="card">
+            <div class="card-head">
+                <h2>Milestones</h2>
+                <div class="note">
+                    @_model.MilestonesComplete of @_model.Milestones.Count complete
+                    @if (_model.NextMilestone is { } next)
+                    {
+                        <text> · next due @next.PlannedDate.ToString("dd-MMM-yy")</text>
+                    }
+                    <a class="no-print" href="@($"/projects/{project.Id}/milestones")" style="margin-left:12px;font-weight:600">Maintain</a>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="data">
+                    <thead>
+                        <tr>
+                            <th scope="col">Milestone</th>
+                            <th scope="col">Planned</th>
+                            <th scope="col">Actual</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Completion</th>
+                            <th scope="col">Owner</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var milestone in _model.Milestones)
+                        {
+                            var overdue = milestone.IsOverdueAt(_model.AsAt);
+                            <tr>
+                                <td>
+                                    <strong>@milestone.Name</strong>
+                                    @if (overdue)
+                                    {
+                                        <div class="small" style="color:var(--delayed);font-weight:600">Overdue</div>
+                                    }
+                                </td>
+                                <td class="date @(overdue ? "overdue" : "")">@milestone.PlannedDate.ToString("dd-MMM-yy")</td>
+                                <td class="date">@(milestone.ActualDate?.ToString("dd-MMM-yy") ?? "—")</td>
+                                <td><MilestoneStatusBadge Status="milestone.Status" /></td>
+                                <td style="min-width:150px"><ProgressBar Percent="milestone.CompletionPercent" Status="ProjectStatus.Completed" /></td>
+                                <td>@milestone.Owner.DisplayName</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                @if (_model.Milestones.Count == 0)
+                {
+                    <div class="empty">No milestones have been recorded for this project.</div>
+                }
+            </div>
+        </div>
+
+        @* FR-09, FR-10. The risk and issue register. *@
+        <div class="card">
+            <div class="card-head">
+                <h2>Risks &amp; issues</h2>
+                <div class="note no-print">
+                    <a href="@($"/projects/{project.Id}/risks")" style="font-weight:600">Maintain register</a>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="data">
+                    <thead>
+                        <tr>
+                            <th scope="col">Type</th>
+                            <th scope="col">Description</th>
+                            <th scope="col">Severity</th>
+                            <th scope="col">Owner</th>
+                            <th scope="col">Mitigation</th>
+                            <th scope="col">Due</th>
+                            <th scope="col">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var risk in _model.RisksAndIssues)
+                        {
+                            <tr>
+                                <td>@risk.Type</td>
+                                <td style="max-width:34ch">@risk.Description</td>
+                                <td><SeverityBadge Severity="risk.Severity" /></td>
+                                <td>@risk.Owner.DisplayName</td>
+                                <td style="max-width:34ch" class="muted">@(risk.Mitigation ?? "—")</td>
+                                <td class="date @(risk.IsOverdueAt(_model.AsAt) ? "overdue" : "")">
+                                    @(risk.DueDate?.ToString("dd-MMM-yy") ?? "—")
+                                </td>
+                                <td>
+                                    <span class="badge @(risk.IsOpen ? "at-risk" : "neutral")">@risk.Status</span>
+                                    @if (!risk.IsOpen && !string.IsNullOrWhiteSpace(risk.ClosureNote))
+                                    {
+                                        <div class="small muted">@risk.ClosureNote</div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                @if (_model.RisksAndIssues.Count == 0)
+                {
+                    <div class="empty">No risks or issues have been raised on this project.</div>
+                }
+            </div>
+        </div>
+
+        @* FR-14. The full update history, showing how status and progress have moved. *@
+        <div class="card">
+            <div class="card-head">
+                <h2>Update history</h2>
+                <div class="note">Written automatically each time an update is submitted</div>
+            </div>
+            <div class="table-wrap">
+                <table class="data">
+                    <thead>
+                        <tr>
+                            <th scope="col">Date</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Progress</th>
+                            <th scope="col">Key update</th>
+                            <th scope="col">Next action</th>
+                            <th scope="col">Attention</th>
+                            <th scope="col">Submitted by</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in _model.History)
+                        {
+                            <tr>
+                                <td class="date">@entry.UpdateDate.ToString("dd-MMM-yy")</td>
+                                <td><StatusBadge Status="entry.Status" /></td>
+                                <td class="num">
+                                    @entry.ProgressPercent%
+                                    @if (entry.PreviousProgressPercent is { } previous && previous != entry.ProgressPercent)
+                                    {
+                                        var movement = entry.ProgressPercent - previous;
+                                        <div class="small muted">@(movement > 0 ? "+" : "")@movement pts</div>
+                                    }
+                                </td>
+                                <td style="max-width:44ch">
+                                    @(entry.KeyUpdate ?? "—")
+                                    @if (!string.IsNullOrWhiteSpace(entry.Achievement))
+                                    {
+                                        <div class="small muted" style="margin-top:4px">
+                                            Achievement: @entry.Achievement
+                                        </div>
+                                    }
+                                </td>
+                                <td style="max-width:30ch" class="muted">@(entry.NextAction ?? "—")</td>
+                                <td>
+                                    @if (entry.AttentionRequired)
+                                    {
+                                        <strong style="color:var(--delayed)">Yes</strong>
+                                    }
+                                    else
+                                    {
+                                        <span class="muted">No</span>
+                                    }
+                                </td>
+                                <td class="small">
+                                    @entry.SubmittedBy.DisplayName
+                                    <div class="muted">@entry.SubmittedOn.ToString("dd-MMM HH:mm")</div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                @if (_model.History.Count == 0)
+                {
+                    <div class="empty">No update has been submitted for this project yet.</div>
+                }
+            </div>
+        </div>
+
+        @* FR-26. Documents attached to the project record. *@
+        @if (_model.Attachments.Count > 0)
+        {
+            <div class="card">
+                <div class="card-head"><h2>Documents</h2></div>
+                <div class="table-wrap">
+                    <table class="data">
+                        <thead>
+                            <tr>
+                                <th scope="col">File</th>
+                                <th scope="col">Attached</th>
+                                <th scope="col">By</th>
+                                <th scope="col">Size</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var attachment in _model.Attachments)
+                            {
+                                <tr>
+                                    <td><a href="@($"/documents/{attachment.Id}")">@attachment.FileName</a></td>
+                                    <td class="date">@attachment.UploadedOn.ToString("dd-MMM-yyyy")</td>
+                                    <td>@attachment.UploadedBy.DisplayName</td>
+                                    <td class="num">@($"{attachment.SizeBytes / 1024d:N0} KB")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public int ProjectId { get; set; }
+
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    private ProjectDetailModel? _model;
+    private bool _loaded;
+    private bool _canContribute;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _model = await Projects.GetDetailAsync(ProjectId);
+        _canContribute = _model is not null && await Access.CanContributeAsync(ProjectId);
+        _loaded = true;
+    }
+
+    /// <summary>FR-24. The browser prints this page; the print stylesheet removes the chrome.</summary>
+    private async Task PrintAsync() => await JS.InvokeVoidAsync("window.print");
+}

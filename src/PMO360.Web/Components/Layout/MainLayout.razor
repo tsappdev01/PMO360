@@ -1,0 +1,49 @@
+@inherits LayoutComponentBase
+@inject ICurrentUser User
+@inject Microsoft.Extensions.Options.IOptions<PortalOptions> PortalOptions
+
+<header class="app-header">
+    <a class="brand" href="/" aria-label="@PortalOptions.Value.ApplicationName — @PortalOptions.Value.Tagline">
+        <img src="img/pmo360-logo-reverse.svg" alt="@PortalOptions.Value.ApplicationName" />
+    </a>
+
+    <nav class="app-nav">
+        <NavLink href="/" Match="NavLinkMatch.All">Dashboard</NavLink>
+        <NavLink href="/projects">Projects</NavLink>
+        <NavLink href="/milestones">Milestones</NavLink>
+        <NavLink href="/risks">Risks &amp; Issues</NavLink>
+        <NavLink href="/updates">Updates</NavLink>
+        <NavLink href="/reports">Reports</NavLink>
+        <AuthorizeView Policy="@AuthorizationPolicies.Administer">
+            <NavLink href="/admin">Administration</NavLink>
+        </AuthorizeView>
+    </nav>
+
+    <div class="header-actions">
+        @* Management reads the dashboard and enters nothing (section 6), so the button that
+           starts an update is shown only to those who may submit one. *@
+        <AuthorizeView Policy="@AuthorizationPolicies.Contribute">
+            <a class="btn accent" href="/updates/submit">Update a Project</a>
+        </AuthorizeView>
+        <a class="avatar" href="MicrosoftIdentity/Account/SignOut" title="@User.DisplayName — sign out">
+            @Initials(User.DisplayName)
+        </a>
+    </div>
+</header>
+
+<main>
+    @Body
+</main>
+
+@code {
+    private static string Initials(string displayName)
+    {
+        var parts = displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length switch
+        {
+            0 => "?",
+            1 => parts[0][..Math.Min(2, parts[0].Length)].ToUpperInvariant(),
+            _ => $"{parts[0][0]}{parts[^1][0]}".ToUpperInvariant()
+        };
+    }
+}

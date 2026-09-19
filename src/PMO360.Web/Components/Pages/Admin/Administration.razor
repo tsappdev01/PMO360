@@ -1,0 +1,139 @@
+@page "/admin"
+@attribute [Authorize(Policy = AuthorizationPolicies.Administer)]
+@rendermode InteractiveServer
+@inject IProjectService ProjectService
+
+@* FR-05. Only the PMO may create, close or reopen a project. *@
+
+<PageTitle>Administration — PMO360</PageTitle>
+
+<div class="page">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">Administration</h1>
+            <div class="subtitle">Project creation and closure, and the reference lists.</div>
+        </div>
+        <a class="btn primary" href="/admin/projects/new">New project</a>
+    </div>
+
+    <div class="card">
+        <div class="card-head">
+            <h2>Projects</h2>
+            <div class="note">@_rows.Count project(s), including completed and closed</div>
+        </div>
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th scope="col">Project</th>
+                        <th scope="col">Entity</th>
+                        <th scope="col">Owner</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Last update</th>
+                        <th scope="col"><span class="sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _rows)
+                    {
+                        <tr>
+                            <td>
+                                <a class="project-name" href="@($"/projects/{row.ProjectId}")">@row.Name</a>
+                                <div class="project-code">@row.ProjectCode</div>
+                            </td>
+                            <td>@row.ReportingEntityName</td>
+                            <td>@row.OwnerName</td>
+                            <td><StatusBadge Status="row.Status" /></td>
+                            <td class="date">@(row.LastUpdateDate?.ToString("dd-MMM-yy") ?? "Never")</td>
+                            <td>
+                                <button class="btn link" @onclick="@(() => StartClose(row))">Close</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @if (_closing is not null)
+    {
+        <div class="card">
+            <div class="card-head"><h2>Close @_closing.Name</h2></div>
+            @if (_error is not null)
+            {
+                <div class="validation" role="alert">@_error</div>
+            }
+            <div class="field">
+                <label for="closure">Closure note</label>
+                <textarea id="closure" style="min-height:72px" value="@_closureNote"
+                          @onchange="@(e => _closureNote = e.Value?.ToString() ?? "")"></textarea>
+                <p class="small muted" style="margin:8px 0 0">
+                    The project leaves the default views and is retained for reporting (FR-05, BR-07).
+                </p>
+            </div>
+            <div class="btn-row end">
+                <button class="btn" @onclick="@(() => _closing = null)">Cancel</button>
+                <button class="btn primary" @onclick="CloseAsync" disabled="@_busy">Close project</button>
+            </div>
+        </div>
+    }
+
+    <div class="card">
+        <div class="card-head"><h2>Reference lists</h2></div>
+        <p class="muted" style="max-width:80ch">
+            Entities, departments, phases and consultants are maintained by script, in
+            <code>db/003_reference_data.sql</code>, so the business can add one without a rebuild and a
+            redeploy. Add the row to that script, commit it, and run it against the environment; the
+            portal picks the change up within five minutes.
+        </p>
+        <p class="muted" style="max-width:80ch">
+            Roles are granted through Entra ID security groups, never to named individuals. To give
+            somebody access, add them to the group for their role; to remove it, take them out.
+        </p>
+    </div>
+</div>
+
+@code {
+    private IReadOnlyList<PortfolioRow> _rows = Array.Empty<PortfolioRow>();
+    private PortfolioRow? _closing;
+    private string _closureNote = string.Empty;
+    private string? _error;
+    private bool _busy;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        var page = await ProjectService.GetPortfolioAsync(
+            new PortfolioFilter { View = PortfolioView.All }, 0, 500);
+        _rows = page.Rows;
+    }
+
+    private void StartClose(PortfolioRow row)
+    {
+        _closing = row;
+        _closureNote = string.Empty;
+        _error = null;
+    }
+
+    private async Task CloseAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await ProjectService.CloseAsync(_closing!.ProjectId, _closureNote);
+            _closing = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

@@ -1,0 +1,435 @@
+@page "/updates/submit"
+@page "/updates/submit/{ProjectId:int}"
+@attribute [Authorize(Policy = AuthorizationPolicies.Contribute)]
+@rendermode InteractiveServer
+@inject IUpdateService Updates
+@inject IProjectService Projects
+@inject IMilestoneService Milestones
+@inject IReferenceDataService Reference
+@inject IAttachmentService Attachments
+@inject NavigationManager Navigation
+
+@* Screen 3 — the update form. FR-11: the only place data is entered. Submitting writes both
+   the current record and a dated history entry (FR-12), and the rules of section 5.2 are
+   checked by the database, which has the last word. *@
+
+<PageTitle>Submit project update — PMO360</PageTitle>
+
+<div class="page" style="max-width:1060px">
+    <h1 class="page-title">Submit project update</h1>
+    <p class="subtitle">
+        Project managers update here. The dashboard is read-only and refreshes from this form.
+    </p>
+
+    @if (_submitted)
+    {
+        <div class="card">
+            <div class="notice good" style="margin-bottom:18px">
+                <strong>Update submitted.</strong>
+                The project record, the last update date and the dashboard have been updated, and the
+                entry has been written to the history.
+            </div>
+            <div class="btn-row">
+                <a class="btn primary" href="@($"/projects/{_form.ProjectId}")">Open the project</a>
+                <a class="btn" href="/">Back to the dashboard</a>
+                <button class="btn link" @onclick="StartAnother">Submit another update</button>
+            </div>
+        </div>
+    }
+    else
+    {
+    <div class="card">
+        @if (_failures.Count > 0)
+        {
+            <div class="validation" role="alert">
+                <strong>This update cannot be submitted yet.</strong>
+                <ul>
+                    @foreach (var failure in _failures)
+                    {
+                        <li><span class="rule">@failure.Rule</span> — @failure.Message</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <div class="field-row">
+            <div class="field">
+                <label for="project">Project</label>
+                <select id="project" value="@_form.ProjectId" @onchange="OnProjectChanged">
+                    <option value="0">Select a project…</option>
+                    @foreach (var project in _myProjects)
+                    {
+                        <option value="@project.ProjectId">@project.Name (@project.ProjectCode)</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label for="update-date">Update date</label>
+                <input id="update-date" type="date" value="@_form.UpdateDate.ToString("yyyy-MM-dd")"
+                       @onchange="OnUpdateDateChanged" />
+            </div>
+        </div>
+
+        @if (_form.ProjectId == 0)
+        {
+            <div class="empty">Select a project to begin. The form opens on the values of its last update.</div>
+        }
+        else
+        {
+            @* FR-02, BR-01. The five agreed values, and nothing else. *@
+            <div class="field">
+                <span class="field-label" id="status-label">Overall status</span>
+                <div class="choice-row" role="radiogroup" aria-labelledby="status-label">
+                    @foreach (var status in ProjectStatusRules.All)
+                    {
+                        <label class="choice @(_form.Status == status ? "selected" : "")"
+                               title="@ProjectStatusRules.Definition(status)">
+                            <input type="radio" name="status" checked="@(_form.Status == status)"
+                                   @onchange="@(() => OnStatusChanged(status))" />
+                            <span class="dot" style="background:@StatusColour(status)" aria-hidden="true"></span>
+                            @ProjectStatusRules.DisplayName(status)
+                        </label>
+                    }
+                </div>
+                @if (ProjectStatusRules.RequiresKeyUpdate(_form.Status))
+                {
+                    <p class="small" style="color:var(--at-risk);margin:8px 0 0">
+                        @ProjectStatusRules.DisplayName(_form.Status) requires a key update stating the cause
+                        and the recovery action (BR-02), and notifies the PMO and the project owner.
+                    </p>
+                }
+            </div>
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="progress">Overall progress</label>
+                    <div style="display:flex;align-items:center;gap:14px">
+                        <input id="progress" type="range" min="0" max="100" step="1"
+                               value="@_form.ProgressPercent" @oninput="OnProgressChanged" style="flex:1 1 auto" />
+                        <strong style="font-variant-numeric:tabular-nums;min-width:52px;text-align:right">
+                            @_form.ProgressPercent%
+                        </strong>
+                    </div>
+                    @if (_project is not null && _form.ProgressPercent < _project.ProgressPercent)
+                    {
+                        <p class="small" style="color:var(--at-risk);margin:8px 0 0">
+                            Progress is going down from @_project.ProgressPercent%. Explain the reduction
+                            in the key update (BR-05).
+                        </p>
+                    }
+                </div>
+                <div class="field">
+                    <label for="phase">Current phase</label>
+                    <select id="phase" value="@_form.PhaseId" @onchange="OnPhaseChanged">
+                        <option value="">Not set</option>
+                        @foreach (var phase in _phases)
+                        {
+                            <option value="@phase.Id">@phase.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="field">
+                <label for="milestone">Current milestone</label>
+                <select id="milestone" value="@_form.MilestoneId" @onchange="OnMilestoneChanged">
+                    <option value="">Not reporting against a milestone</option>
+                    @foreach (var milestone in _milestones.Where(m => m.IsIncomplete))
+                    {
+                        <option value="@milestone.Id">
+                            @milestone.Name — due @milestone.PlannedDate.ToString("dd-MMM-yyyy")
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="field">
+                <label for="key-update">
+                    Key update <span class="hint">— what management should know this week</span>
+                </label>
+                <textarea id="key-update" value="@_form.KeyUpdate"
+                          @onchange="@(e => _form.KeyUpdate = e.Value?.ToString())"></textarea>
+            </div>
+
+            <div class="field">
+                <label for="achievement">Key achievement since last update</label>
+                <textarea id="achievement" style="min-height:72px" value="@_form.Achievement"
+                          @onchange="@(e => _form.Achievement = e.Value?.ToString())"></textarea>
+            </div>
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="next-action">Next action</label>
+                    <input id="next-action" type="text" value="@_form.NextAction"
+                           @onchange="@(e => _form.NextAction = e.Value?.ToString())" />
+                </div>
+                <div class="field">
+                    <label for="action-owner">Action owner</label>
+                    <input id="action-owner" type="text" value="@_form.NextActionOwner?.DisplayName"
+                           @onchange="OnActionOwnerChanged" />
+                </div>
+                <div class="field">
+                    <label for="action-due">Due date</label>
+                    <input id="action-due" type="date" value="@_form.NextActionDueDate?.ToString("yyyy-MM-dd")"
+                           @onchange="OnActionDueChanged" />
+                </div>
+            </div>
+
+            @* BR-03. Yes requires a reason before the update can be submitted. *@
+            <div class="field" style="border:1px solid var(--border);border-radius:8px;padding:16px;background:var(--surface-muted)">
+                <span class="field-label" id="attention-label">Management attention required?</span>
+                <div class="choice-row" role="radiogroup" aria-labelledby="attention-label">
+                    <label class="choice @(!_form.AttentionRequired ? "selected" : "")">
+                        <input type="radio" name="attention" checked="@(!_form.AttentionRequired)"
+                               @onchange="@(() => _form.AttentionRequired = false)" />
+                        No
+                    </label>
+                    <label class="choice @(_form.AttentionRequired ? "selected" : "")">
+                        <input type="radio" name="attention" checked="@_form.AttentionRequired"
+                               @onchange="@(() => _form.AttentionRequired = true)" />
+                        Yes — escalate to the steering committee
+                    </label>
+                </div>
+
+                @if (_form.AttentionRequired)
+                {
+                    <div class="field" style="margin:14px 0 0">
+                        <label for="attention-reason">Reason</label>
+                        <textarea id="attention-reason" style="min-height:72px" value="@_form.AttentionReason"
+                                  @onchange="@(e => _form.AttentionReason = e.Value?.ToString())"></textarea>
+                    </div>
+                }
+
+                <p class="small muted" style="margin:12px 0 0">
+                    Selecting Yes, or setting the status to At Risk or Delayed, notifies the PMO and the
+                    project sponsor automatically.
+                </p>
+            </div>
+
+            @* FR-26. A supporting document, attached to this update. *@
+            <div class="field">
+                <label for="document">Supporting document <span class="hint">— optional</span></label>
+                <InputFile id="document" OnChange="OnFileSelected" />
+                @if (_selectedFile is not null)
+                {
+                    <p class="small muted" style="margin:8px 0 0">
+                        @_selectedFile.Name (@($"{_selectedFile.Size / 1024d:N0} KB")) will be attached when
+                        the update is submitted.
+                    </p>
+                }
+                @if (_fileError is not null)
+                {
+                    <p class="small" style="color:var(--delayed);margin:8px 0 0">@_fileError</p>
+                }
+            </div>
+
+            <hr style="border:none;border-top:1px solid var(--border);margin:22px 0" />
+
+            <div class="btn-row">
+                <a class="btn link" href="/">Cancel and return to the dashboard</a>
+                <span class="spacer"></span>
+                <button class="btn" @onclick="SaveDraftAsync" disabled="@_busy">Save as draft</button>
+                <button class="btn primary" @onclick="SubmitAsync" disabled="@_busy">Submit update</button>
+            </div>
+
+            @if (_draftSaved)
+            {
+                <p class="small muted" style="text-align:right;margin:10px 0 0">
+                    Draft saved. It is yours alone and does not appear on the dashboard.
+                </p>
+            }
+        }
+    </div>
+
+    }
+
+    <div class="card">
+        <div class="card-head"><h2>What happens when this is submitted</h2></div>
+        <ol class="muted" style="margin:0;padding-left:20px;line-height:1.9">
+            <li>The project record is updated with the status, progress, phase and next action.</li>
+            <li>A dated entry is written to the update history and cannot afterwards be edited.</li>
+            <li>The last update date and your name are stamped automatically.</li>
+            <li>The management dashboard reflects the change with no manual step.</li>
+            <li>Alerts are sent if the status has worsened or attention is flagged.</li>
+            <li>The previous values remain visible in the history.</li>
+        </ol>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int? ProjectId { get; set; }
+
+    private UpdateSubmission _form = new() { UpdateDate = DateOnly.FromDateTime(DateTime.Today) };
+    private IReadOnlyList<PortfolioRow> _myProjects = Array.Empty<PortfolioRow>();
+    private IReadOnlyList<Phase> _phases = Array.Empty<Phase>();
+    private IReadOnlyList<Milestone> _milestones = Array.Empty<Milestone>();
+    private IReadOnlyList<ValidationFailure> _failures = Array.Empty<ValidationFailure>();
+    private PortfolioRow? _project;
+    private IBrowserFile? _selectedFile;
+    private string? _fileError;
+    private bool _submitted;
+    private bool _draftSaved;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _phases = await Reference.GetPhasesAsync();
+
+        // The list offers only what this person may update, so a wrong project cannot be picked.
+        var page = await Projects.GetPortfolioAsync(
+            new PortfolioFilter { View = PortfolioView.Active, MyProjectsOnly = true }, 0, 200);
+        _myProjects = page.Rows;
+
+        if (ProjectId is { } id && id > 0)
+        {
+            await LoadProjectAsync(id);
+        }
+    }
+
+    private async Task OnProjectChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var id) && id > 0)
+        {
+            await LoadProjectAsync(id);
+        }
+        else
+        {
+            _form = new UpdateSubmission { UpdateDate = DateOnly.FromDateTime(DateTime.Today) };
+            _project = null;
+        }
+    }
+
+    private async Task LoadProjectAsync(int projectId)
+    {
+        // FR-15. The form opens on the values of the previous update, so the manager edits
+        // rather than retypes.
+        _form = await Updates.GetFormDefaultsAsync(projectId);
+        _form.ProjectId = projectId;
+        _milestones = await Milestones.GetForProjectAsync(projectId);
+        _project = _myProjects.FirstOrDefault(p => p.ProjectId == projectId);
+        _failures = Array.Empty<ValidationFailure>();
+        _draftSaved = false;
+    }
+
+    private void OnStatusChanged(ProjectStatus status) => _form.Status = status;
+
+    private void OnProgressChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            _form.ProgressPercent = Math.Clamp(value, 0, 100);
+        }
+    }
+
+    private void OnPhaseChanged(ChangeEventArgs e) =>
+        _form.PhaseId = int.TryParse(e.Value?.ToString(), out var id) ? id : null;
+
+    private void OnMilestoneChanged(ChangeEventArgs e) =>
+        _form.MilestoneId = int.TryParse(e.Value?.ToString(), out var id) ? id : null;
+
+    private void OnUpdateDateChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var date))
+        {
+            _form.UpdateDate = date;
+        }
+    }
+
+    private void OnActionDueChanged(ChangeEventArgs e) =>
+        _form.NextActionDueDate = DateOnly.TryParse(e.Value?.ToString(), out var date) ? date : null;
+
+    private void OnActionOwnerChanged(ChangeEventArgs e)
+    {
+        var name = e.Value?.ToString();
+        _form.NextActionOwner = string.IsNullOrWhiteSpace(name) ? null : new PersonRef(name.Trim());
+    }
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        _fileError = null;
+        _selectedFile = e.File;
+    }
+
+    private async Task SaveDraftAsync()
+    {
+        _busy = true;
+        try
+        {
+            await Updates.SaveDraftAsync(_form);
+            _draftSaved = true;
+            _failures = Array.Empty<ValidationFailure>();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        _draftSaved = false;
+
+        try
+        {
+            var result = await Updates.SubmitAsync(_form);
+
+            if (!result.Succeeded)
+            {
+                _failures = result.Failures;
+                return;
+            }
+
+            _failures = Array.Empty<ValidationFailure>();
+
+            if (_selectedFile is not null && result.UpdateId is { } updateId)
+            {
+                await AttachAsync(updateId);
+            }
+
+            _submitted = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task AttachAsync(int updateId)
+    {
+        // The document is attached after the update is written: a file that is refused must not
+        // lose the manager the update they have just submitted.
+        const long maxBytes = 20 * 1024 * 1024;
+
+        try
+        {
+            await using var stream = _selectedFile!.OpenReadStream(maxBytes);
+            await Attachments.AttachAsync(
+                _form.ProjectId,
+                updateId,
+                AttachmentScope.Update,
+                new AttachmentUpload(stream, _selectedFile.Name, _selectedFile.ContentType, _selectedFile.Size));
+        }
+        catch (Exception ex)
+        {
+            _fileError = $"The update was submitted, but the document could not be attached: {ex.Message}";
+        }
+    }
+
+    private void StartAnother()
+    {
+        _submitted = false;
+        _selectedFile = null;
+        _form = new UpdateSubmission { UpdateDate = DateOnly.FromDateTime(DateTime.Today) };
+        _project = null;
+    }
+
+    private static string StatusColour(ProjectStatus status) => status switch
+    {
+        ProjectStatus.OnTrack => "var(--on-track)",
+        ProjectStatus.AtRisk => "#C8860F",
+        ProjectStatus.Delayed => "var(--delayed)",
+        ProjectStatus.OnHold => "var(--on-hold)",
+        _ => "var(--completed)"
+    };
+}

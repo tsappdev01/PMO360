@@ -31,9 +31,18 @@ in their own `GO` batch, because a batch aborts on error and takes the rest of t
 
 ### The runner scripts
 
-`apply.ps1` (PowerShell) and `apply.sh` (bash) do the whole run. Both apply every `.sql` file in
-this folder in filename order — which is why they are numbered. A new script is picked up by
-being dropped in with the right number; there is no list inside the runners to keep in step.
+`apply.cmd` (Windows command prompt), `apply.ps1` (PowerShell) and `apply.sh` (bash) do the
+whole run. Each applies every `.sql` file in this folder in filename order — which is why they
+are numbered. A new script is picked up by being dropped in with the right number; there is no
+list inside the runners to keep in step.
+
+```cmd
+rem UATWEB01 with a SQL login, from the db folder
+apply.cmd UATWEB01 PMO360 bpuser bpuser
+
+rem Windows authentication
+apply.cmd UATWEB01 PMO360
+```
 
 ```powershell
 # Azure SQL, signed in with Entra ID
@@ -61,9 +70,10 @@ Both runners pass `-b` to sqlcmd and stop on the first error, printing it and ex
 A failure is never buried under the scripts that follow it, and a half-applied database is
 obvious rather than quiet.
 
-Neither runner takes a password on the command line, where it would be visible in the process
-list and in shell history: `apply.sh` reads `SQLCMDPASSWORD` or prompts, and `apply.ps1` takes a
-`SecureString` or prompts.
+`apply.sh` reads `SQLCMDPASSWORD` or prompts, and `apply.ps1` takes a `SecureString` or prompts,
+so neither puts a password on the command line where it would be visible in the process list and
+in shell history. `apply.cmd` does take one as an argument, because a batch file has no better
+option — use Windows authentication where you can.
 
 ### By hand
 

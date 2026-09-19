@@ -144,7 +144,10 @@
                     {
                         <text> · next due @next.PlannedDate.ToString("dd-MMM-yy")</text>
                     }
-                    <a class="no-print" href="@($"/projects/{project.Id}/milestones")" style="margin-left:12px;font-weight:600">Maintain</a>
+                    @if (_canContribute)
+                    {
+                        <a class="no-print" href="@($"/projects/{project.Id}/milestones")" style="margin-left:12px;font-weight:600">Maintain</a>
+                    }
                 </div>
             </div>
             <div class="table-wrap">
@@ -191,9 +194,12 @@
         <div class="card">
             <div class="card-head">
                 <h2>Risks &amp; issues</h2>
-                <div class="note no-print">
-                    <a href="@($"/projects/{project.Id}/risks")" style="font-weight:600">Maintain register</a>
-                </div>
+                @if (_canContribute)
+                {
+                    <div class="note no-print">
+                        <a href="@($"/projects/{project.Id}/risks")" style="font-weight:600">Maintain register</a>
+                    </div>
+                }
             </div>
             <div class="table-wrap">
                 <table class="data">

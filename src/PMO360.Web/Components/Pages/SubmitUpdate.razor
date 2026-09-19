@@ -7,6 +7,7 @@
 @inject IMilestoneService Milestones
 @inject IReferenceDataService Reference
 @inject IAttachmentService Attachments
+@inject IProjectAccessService Access
 @inject NavigationManager Navigation
 
 @* Screen 3 — the update form. FR-11: the only place data is entered. Submitting writes both
@@ -276,8 +277,13 @@
         _phases = await Reference.GetPhasesAsync();
 
         // The list offers only what this person may update, so a wrong project cannot be picked.
+        // The PMO may update any project, so their list is not narrowed to their own.
         var page = await Projects.GetPortfolioAsync(
-            new PortfolioFilter { View = PortfolioView.Active, MyProjectsOnly = true }, 0, 200);
+            new PortfolioFilter
+            {
+                View = PortfolioView.Active,
+                MyProjectsOnly = !Access.CanAdministerProjects
+            }, 0, 200);
         _myProjects = page.Rows;
 
         if (ProjectId is { } id && id > 0)

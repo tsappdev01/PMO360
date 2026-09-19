@@ -82,6 +82,37 @@ For UAT, add `Notifications__RedirectAllTo` with one address. Every notification
 instead of to the business, so WF-01 to WF-08 can be exercised end to end without mailing the
 board. `Notifications__Enabled=false` switches them off entirely.
 
+## Running without single sign-on
+
+`Authentication:EnableSso` set to `false` starts the portal with no sign-in at all. Everyone who
+reaches the site is signed in automatically as the configured local user and lands on the
+dashboard. It needs no app registration, so it is the way to see the portal working before Entra
+ID is set up, and the way to develop against it day to day.
+
+```jsonc
+"Authentication": {
+  "EnableSso": false,
+  "LocalUser": {
+    "DisplayName": "Nayyar Jawaid",
+    "Email": "nayyar.jawaid@dubaiinvestments.com",
+    "Roles": [ "PmoAdministrator" ]     // omit to hold every role
+  }
+}
+```
+
+Narrowing `Roles` is the only way to see the portal as one role sees it — as a consultant, say,
+who should reach only their own projects. Leave it out and the local user holds all six.
+
+Two things guard against this being left on by accident:
+
+- Every page carries a banner saying single sign-on is off and who you are signed in as.
+- Outside the Development environment the portal **refuses to start** unless
+  `Authentication:AllowSsoDisabledOutsideDevelopment` is also `true`. An unauthenticated portal
+  should never be something you arrive at by forgetting a setting.
+
+With SSO off, `AzureAd:TenantId` and `AzureAd:ClientId` are not read at all, so the placeholders
+in `appsettings.json` are fine to leave.
+
 ## Order of deployment
 
 1. Run the scripts in `db/` (see `db/README.md`), including `030_permissions.sql` with the right

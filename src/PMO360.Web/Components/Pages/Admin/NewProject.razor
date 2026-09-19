@@ -4,6 +4,7 @@
 @inject IProjectService ProjectService
 @inject IReferenceDataService Reference
 @inject NavigationManager Navigation
+@using PMO360.Web.ErrorHandling
 
 @* AC-01. A project can be created by the PMO with all mandatory fields and a unique project ID,
    against the correct Group entity. The ID is allocated by the database, not typed. *@
@@ -192,7 +193,7 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _error = UserMessage.For(ex);
         }
         finally
         {

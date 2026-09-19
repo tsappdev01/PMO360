@@ -9,6 +9,7 @@
 @inject IAttachmentService Attachments
 @inject IProjectAccessService Access
 @inject NavigationManager Navigation
+@using PMO360.Web.ErrorHandling
 
 @* Screen 3 — the update form. FR-11: the only place data is entered. Submitting writes both
    the current record and a dated history entry (FR-12), and the rules of section 5.2 are
@@ -418,7 +419,8 @@
         }
         catch (Exception ex)
         {
-            _fileError = $"The update was submitted, but the document could not be attached: {ex.Message}";
+            _fileError = "The update was submitted, but the document could not be attached. "
+                         + UserMessage.For(ex);
         }
     }
 

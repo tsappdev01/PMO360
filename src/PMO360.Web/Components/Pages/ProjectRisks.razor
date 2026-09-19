@@ -4,6 +4,7 @@
 @inject IRiskService RiskService
 @inject IProjectService ProjectService
 @inject IProjectAccessService Access
+@using PMO360.Web.ErrorHandling
 
 @* FR-09, FR-10, WF-06. Raising an item at High severity notifies the PMO and the project owner
    immediately. Closing keeps the record and requires the closure note. *@
@@ -241,7 +242,7 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _error = UserMessage.For(ex);
         }
         finally
         {
@@ -268,7 +269,7 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _error = UserMessage.For(ex);
         }
         finally
         {

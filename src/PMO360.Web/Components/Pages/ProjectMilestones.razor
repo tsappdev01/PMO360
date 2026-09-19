@@ -4,6 +4,7 @@
 @inject IMilestoneService MilestoneService
 @inject IProjectService ProjectService
 @inject IProjectAccessService Access
+@using PMO360.Web.ErrorHandling
 
 @* FR-06. Any number of milestones per project, each with planned date, actual or forecast date,
    owner, status and completion. BR-07: a milestone that is no longer wanted is cancelled. *@
@@ -214,7 +215,7 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _error = UserMessage.For(ex);
         }
         finally
         {

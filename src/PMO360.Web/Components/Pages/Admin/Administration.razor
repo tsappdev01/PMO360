@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = AuthorizationPolicies.Administer)]
 @rendermode InteractiveServer
 @inject IProjectService ProjectService
+@using PMO360.Web.ErrorHandling
 
 @* FR-05. Only the PMO may create, close or reopen a project. *@
 
@@ -129,7 +130,7 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _error = UserMessage.For(ex);
         }
         finally
         {

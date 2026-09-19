@@ -1,19 +1,76 @@
 @page "/error"
+@using System.Diagnostics
+@using PMO360.Web.ErrorHandling
+@inject ILogger<Error> Logger
+
+@* What a user sees when something fails. A sentence they can act on, and a reference they can
+   quote. No stack trace, no exception type, no SQL error number: the detail is in the log,
+   which is where it is useful and where it does not leak how the portal is built. *@
 
 <PageTitle>Something went wrong — PMO360</PageTitle>
 
-<div class="page">
+<div class="page" style="max-width:720px">
     <h1 class="page-title">Something went wrong</h1>
     <p class="subtitle">The portal could not complete that request.</p>
-    <div class="card" style="max-width:640px">
-        <p>
-            Nothing you were working on has been lost unless the page says otherwise: an update is
+
+    <div class="card">
+        <p style="font-size:16px">@_message</p>
+
+        <p class="muted">
+            Nothing you were working on has been lost unless the page said otherwise. An update is
             saved in one step, so it is either written in full or not written at all.
         </p>
-        <p class="muted small">
-            If this keeps happening, tell IT Support what you were doing and roughly when. The error has
-            been logged with a time stamp.
-        </p>
-        <a class="btn primary" href="/">Back to the dashboard</a>
+
+        @if (_reference is not null)
+        {
+            <div class="notice" style="margin:18px 0">
+                <div class="label" style="font-size:11.5px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--ink-muted)">
+                    Reference
+                </div>
+                <div style="font-family:Consolas,'Courier New',monospace;font-size:18px;font-weight:600;letter-spacing:1px;margin-top:4px">
+                    @_reference
+                </div>
+                <div class="small muted" style="margin-top:6px">
+                    Quote this to IT Support. It identifies this one failure in the logs.
+                </div>
+            </div>
+        }
+
+        <div class="btn-row">
+            <a class="btn primary" href="/">Back to the dashboard</a>
+            <a class="btn" href="javascript:history.back()">Go back</a>
+        </div>
     </div>
 </div>
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    private string _message =
+        "Something went wrong and the portal could not complete that. Nothing has been changed.";
+
+    private string? _reference;
+
+    protected override void OnInitialized()
+    {
+        var handler = HttpContext?.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
+        var exception = handler?.Error;
+
+        // The reference ties what the user sees to what the log holds. The trace identifier is
+        // already in every log line for this request, so it is the one to quote.
+        _reference = (Activity.Current?.Id ?? HttpContext?.TraceIdentifier) is { Length: > 0 } id
+            ? UserMessage.NewReference() + "-" + id.GetHashCode().ToString("X8")
+            : UserMessage.NewReference();
+
+        if (exception is null)
+        {
+            return;
+        }
+
+        _message = UserMessage.For(exception);
+
+        Logger.LogError(exception,
+            "Unhandled failure on {Path}. Reference {Reference} was shown to the user.",
+            handler?.Path ?? "(unknown)", _reference);
+    }
+}

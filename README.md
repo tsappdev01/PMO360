@@ -46,6 +46,16 @@ tests/      the business rules and the derivations
 dotnet run --project src/PMO360.Web
 ```
 
+To run it before Entra ID is set up, turn single sign-on off:
+
+```bash
+dotnet user-secrets set "Authentication:EnableSso" "false" --project src/PMO360.Web
+```
+
+Nobody signs in, everyone is the configured local user, and the portal opens on the dashboard.
+A banner on every page says so, and outside Development it refuses to start unless the setting
+is explicitly acknowledged — see `docs/03-deployment.md`.
+
 The portal checks at startup that the database's controlled value lists match its own enums and
 refuses to run if they differ, naming the mismatch — a script that was not applied shows as a
 clear message rather than as a wrong dashboard.
@@ -80,6 +90,12 @@ the `Authorization:RoleGroups` setting. Access is granted by adding somebody to 
 
 **Dates are Dubai's.** Everything date-relative goes through `IClock`. A milestone must not
 become overdue because a server in UTC has not yet reached midnight.
+
+**Errors are written for the person reading them.** No stack trace, exception type or SQL error
+number reaches a user: `UserMessage` turns an exception into a sentence they can act on, and the
+detail goes to the log against a reference they can quote. Startup failures do the same — a
+missing setting or an unreachable database prints a short block naming what to fix, not a stack.
+When adding a `catch` that shows something on screen, use `UserMessage.For(ex)`.
 
 ## Outstanding
 

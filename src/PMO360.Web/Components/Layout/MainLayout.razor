@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 @inject ICurrentUser User
 @inject Microsoft.Extensions.Options.IOptions<PortalOptions> PortalOptions
+@inject Microsoft.Extensions.Options.IOptions<SsoOptions> SsoOptions
 
 <header class="app-header">
     <a class="brand" href="/" aria-label="@PortalOptions.Value.ApplicationName — @PortalOptions.Value.Tagline">
@@ -25,11 +26,30 @@
         <AuthorizeView Policy="@AuthorizationPolicies.Contribute">
             <a class="btn accent" href="/updates/submit">Update a Project</a>
         </AuthorizeView>
-        <a class="avatar" href="MicrosoftIdentity/Account/SignOut" title="@User.DisplayName — sign out">
-            @Initials(User.DisplayName)
-        </a>
+        @if (SsoOptions.Value.EnableSso)
+        {
+            <a class="avatar" href="MicrosoftIdentity/Account/SignOut" title="@User.DisplayName — sign out">
+                @Initials(User.DisplayName)
+            </a>
+        }
+        else
+        {
+            <span class="avatar" title="@User.DisplayName — signed in automatically, single sign-on is off">
+                @Initials(User.DisplayName)
+            </span>
+        }
     </div>
 </header>
+
+@if (!SsoOptions.Value.EnableSso)
+{
+    <div class="sso-off no-print" role="status">
+        <strong>Single sign-on is off.</strong>
+        Everyone reaching this site is signed in automatically as @User.DisplayName. For
+        development and demonstration only — set <code>Authentication:EnableSso</code> to
+        <code>true</code> before this portal carries real data.
+    </div>
+}
 
 <main>
     @Body

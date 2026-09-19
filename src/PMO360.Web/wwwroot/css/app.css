@@ -395,3 +395,21 @@ button:focus-visible, a:focus-visible {
     .card { box-shadow: none; border-color: #C9D2DC; break-inside: avoid; page-break-inside: avoid; }
     a { color: var(--ink); }
 }
+
+/* Shown on every page when Authentication:EnableSso is false. Deliberately hard to miss: a
+   portal that is not asking who you are should not look like one that is. */
+.sso-off {
+    background: #FCF1DC;
+    border-bottom: 1px solid #E8D4A8;
+    color: #6B4A08;
+    padding: 10px 24px;
+    font-size: 13.5px;
+    text-align: center;
+}
+
+.sso-off code {
+    background: rgba(107, 74, 8, .1);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 12.5px;
+}

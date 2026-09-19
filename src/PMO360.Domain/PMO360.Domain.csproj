@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>PMO360.Domain</RootNamespace>
+  </PropertyGroup>
+</Project>

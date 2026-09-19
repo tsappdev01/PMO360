@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>PMO360.Web</RootNamespace>
+    <UserSecretsId>pmo360-web</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Identity.Web" Version="3.3.1" />
+    <PackageReference Include="Microsoft.Identity.Web.UI" Version="3.3.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PMO360.Application\PMO360.Application.csproj" />
+    <ProjectReference Include="..\PMO360.Domain\PMO360.Domain.csproj" />
+    <ProjectReference Include="..\PMO360.Infrastructure\PMO360.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

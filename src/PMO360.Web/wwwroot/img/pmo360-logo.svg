@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 120" role="img" aria-label="PMO360 — Project Management Office Portal">
+  <title>PMO360</title>
+  <defs>
+    <linearGradient id="pmoSweep" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#1E90E0"/>
+      <stop offset="50%" stop-color="#2AA6A0"/>
+      <stop offset="100%" stop-color="#55B94A"/>
+    </linearGradient>
+    <linearGradient id="pmoBars" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#1B3B6F"/>
+      <stop offset="45%" stop-color="#1E90E0"/>
+      <stop offset="100%" stop-color="#55B94A"/>
+    </linearGradient>
+  </defs>
+
+  <!-- The circular arrow sweeping around "360": continuous delivery, coming back round. -->
+  <g fill="none" stroke="url(#pmoSweep)" stroke-width="13" stroke-linecap="round">
+    <path d="M 283 12 A 62 62 0 0 1 396 57"/>
+    <path d="M 387 103 A 62 62 0 0 1 276 108"/>
+  </g>
+  <path d="M 392 34 L 414 57 L 385 66 Z" fill="#55B94A"/>
+
+  <text x="4" y="92" font-family="Segoe UI Black, Segoe UI, Arial Black, Helvetica, sans-serif"
+        font-size="86" font-weight="800" letter-spacing="-2" fill="#1B3B6F">PM</text>
+
+  <!-- The O of PMO, drawn as a ring around a small bar chart: one view, every project. -->
+  <circle cx="177" cy="62" r="32" fill="none" stroke="#1B3B6F" stroke-width="14"/>
+  <g fill="url(#pmoBars)">
+    <rect x="163" y="62" width="8" height="16" rx="1.5"/>
+    <rect x="174" y="52" width="8" height="26" rx="1.5"/>
+    <rect x="185" y="44" width="8" height="34" rx="1.5"/>
+  </g>
+
+  <text x="215" y="92" font-family="Segoe UI Black, Segoe UI, Arial Black, Helvetica, sans-serif"
+        font-size="86" font-weight="800" letter-spacing="-2" fill="url(#pmoSweep)">360</text>
+
+</svg>

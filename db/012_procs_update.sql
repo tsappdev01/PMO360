@@ -93,7 +93,9 @@ BEGIN
 
     SET @UpdateId = NULL;
 
-    DECLARE @Failures TABLE (Field varchar(50), Rule varchar(10), Message nvarchar(400));
+    /* [Rule] is bracketed because RULE is a reserved keyword in T-SQL. The column keeps that
+       name because it is the BRD reference the portal shows against the failure. */
+    DECLARE @Failures TABLE (Field varchar(50), [Rule] varchar(10), [Message] nvarchar(400));
 
     DECLARE @CurrentStatus   tinyint,
             @CurrentProgress int,
@@ -179,7 +181,7 @@ BEGIN
 
     IF EXISTS (SELECT 1 FROM @Failures)
     BEGIN
-        SELECT Field, Rule, Message FROM @Failures;
+        SELECT Field, [Rule], [Message] FROM @Failures;
         RETURN;
     END;
 
@@ -242,7 +244,7 @@ BEGIN
     COMMIT TRANSACTION;
 
     /* No rows: accepted. The caller reads @UpdateId. */
-    SELECT Field, Rule, Message FROM @Failures;
+    SELECT Field, [Rule], [Message] FROM @Failures;
 END;
 GO
 

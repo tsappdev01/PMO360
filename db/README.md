@@ -21,11 +21,11 @@ in their own `GO` batch, because a batch aborts on error and takes the rest of t
 | `002_controlled_values.sql` | The controlled value lists (FR-02, BR-01). Ids are fixed and mirror the enums in `PMO360.Domain.Enums`. |
 | `003_reference_data.sql` | Reporting entities, departments, phases and consultants. |
 | `010_functions.sql` | `fn_VisibleProjects` (the section 6 scope), `fn_NextMilestone` (FR-07), the audit writer and the reference/enumeration readers. |
-| `011_procs_project.sql` | Portfolio search and the standard views, project detail, create, close, reopen, particulars and assignments. |
 | `012_procs_update.sql` | The update form's defaults, draft and submission — with the section 5.2 business rules. |
 | `013_procs_milestone_risk.sql` | Milestones (FR-06 to FR-08) and the risk and issue register (FR-09, FR-10). |
 | `014_procs_dashboard.sql` | The management dashboard and the FR-23 views. |
 | `015_procs_attachment_notification.sql` | Supporting documents, and the data behind WF-01 to WF-08. |
+| `016_procs_project.sql` | Portfolio search and the standard views, project detail, create, close, reopen, particulars and assignments. Runs after the others because `usp_Project_GetDetail` calls them. |
 | `020_views_powerbi.sql` | The reporting views Power BI reads (section 5.4). |
 | `030_permissions.sql` | The application and Power BI principals and their rights. Set the two principal names first. |
 
@@ -76,9 +76,11 @@ sqlcmd -S "$SQL_SERVER" -d PMO360 -G -b -I -i 012_procs_update.sql
 
 `-G` authenticates with Entra ID and `-b` stops on the first error.
 
-The procedures in `011` call procedures defined in `013` and `015`. SQL Server resolves those
-names when the procedure runs, not when it is created, so the order above is fine — but all the
-scripts must be applied before the portal is started.
+`016_procs_project.sql` is numbered last on purpose. `usp_Project_GetDetail` calls the
+milestone, risk, history and attachment procedures, and SQL Server warns about a procedure that
+references one which does not exist yet. The reference resolves at run time either way, so the
+warning is harmless — but a clean run that prints nothing is worth more than one people learn to
+read past.
 
 ## Two things to keep in step
 

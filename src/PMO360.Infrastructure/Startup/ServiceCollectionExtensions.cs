@@ -3,6 +3,7 @@ using Azure.Identity;
 using Azure.Storage.Blobs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Graph;
 using PMO360.Application.Abstractions;
 using PMO360.Application.Options;
@@ -48,18 +49,50 @@ public static class ServiceCollectionExtensions
         var credential = new DefaultAzureCredential();
         services.AddSingleton<TokenCredential>(credential);
 
-        // Blob Storage — supporting documents (FR-26).
-        var storageUri = configuration[$"{StorageOptions.SectionName}:ServiceUri"];
-        if (!string.IsNullOrWhiteSpace(storageUri))
+        // Supporting documents (FR-26). Storage:Provider chooses where the bytes live; the
+        // catalogue row in pmo.Attachment is the same either way.
+        var storage = configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>()
+                      ?? new StorageOptions();
+
+        switch (storage.Provider)
         {
-            services.AddSingleton(_ => new BlobServiceClient(new Uri(storageUri), credential));
-            services.AddScoped<IDocumentStore, BlobDocumentStore>();
-        }
-        else
-        {
-            // No storage account configured: the portal runs, and attaching a document says so
-            // rather than failing with a null reference somewhere deeper.
-            services.AddScoped<IDocumentStore, UnconfiguredDocumentStore>();
+            case DocumentStorageProvider.Database:
+                services.AddScoped<IDocumentStore, DatabaseDocumentStore>();
+                break;
+
+            case DocumentStorageProvider.Blob when storage.HasUsableServiceUri:
+                services.AddSingleton(_ => new BlobServiceClient(new Uri(storage.ServiceUri), credential));
+                services.AddScoped<IDocumentStore, BlobDocumentStore>();
+                break;
+
+            case DocumentStorageProvider.Blob:
+                // Blob was asked for but Storage:ServiceUri is not a URI a client can be built
+                // from — the committed settings file ships a placeholder, which is not empty and
+                // so looks configured. Building the client here threw UriFormatException at
+                // dependency resolution, which took out the whole update form rather than just
+                // the ability to attach a file. The portal is worth more running without
+                // attachments than not running, so this falls back and says why.
+                services.AddScoped<IDocumentStore>(provider =>
+                {
+                    provider.GetRequiredService<ILogger<UnconfiguredDocumentStore>>().LogWarning(
+                        "Storage:Provider is Blob but Storage:ServiceUri is '{ServiceUri}', which is "
+                        + "not a usable absolute URI. Documents cannot be attached. Set it to the "
+                        + "blob service URI, or set Storage:Provider to Database to keep documents "
+                        + "in SQL Server.",
+                        string.IsNullOrWhiteSpace(storage.ServiceUri) ? "(not set)" : storage.ServiceUri);
+
+                    return new UnconfiguredDocumentStore(
+                        "Document storage is not configured. Set Storage:ServiceUri to the blob "
+                        + "service URI of the PMO360 storage account, or set Storage:Provider to "
+                        + "Database to keep documents in SQL Server.");
+                });
+                break;
+
+            default:
+                services.AddScoped<IDocumentStore>(_ => new UnconfiguredDocumentStore(
+                    "Document storage is switched off. Set Storage:Provider to Blob or Database "
+                    + "to attach documents."));
+                break;
         }
 
         // Microsoft Graph — notifications (section 5.3) and the directory picker (FR-04).
@@ -89,19 +122,19 @@ public static class ServiceCollectionExtensions
     }
 }
 
-/// <summary>Stands in when no storage account is configured, so the reason is legible.</summary>
-internal sealed class UnconfiguredDocumentStore : IDocumentStore
+/// <summary>
+/// Stands in when documents have nowhere to go. It exists so that a storage account which is
+/// missing or misconfigured costs the portal its attachments and nothing else: every other page
+/// works, and the one action that cannot be done explains itself.
+/// </summary>
+internal sealed class UnconfiguredDocumentStore(string message) : IDocumentStore
 {
-    private const string Message =
-        "Document storage is not configured. Set Storage:ServiceUri to the blob service URI of the "
-        + "PMO360 storage account.";
-
     public Task<StoredDocument> SaveAsync(
         Stream content, string fileName, string contentType, string projectCode, CancellationToken cancellationToken = default) =>
-        throw new InvalidOperationException(Message);
+        throw new InvalidOperationException(message);
 
     public Task<DocumentContent?> OpenAsync(string blobName, CancellationToken cancellationToken = default) =>
-        throw new InvalidOperationException(Message);
+        throw new InvalidOperationException(message);
 
     public Task<Uri?> TryGetReadLinkAsync(
         string blobName, TimeSpan lifetime, CancellationToken cancellationToken = default) =>

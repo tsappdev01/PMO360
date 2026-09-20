@@ -64,6 +64,9 @@
                         {
                             <a class="btn primary" href="@($"/updates/submit/{project.Id}")">Submit update</a>
                         }
+                        <AuthorizeView Policy="@AuthorizationPolicies.Administer">
+                            <a class="btn" href="@($"/admin/projects/{project.Id}/edit")">Edit project</a>
+                        </AuthorizeView>
                         @* FR-24. The one-page status report is this page, printed. *@
                         <button class="btn" @onclick="PrintAsync">Export status report</button>
                     </div>

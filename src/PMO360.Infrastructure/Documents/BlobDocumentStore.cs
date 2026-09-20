@@ -26,21 +26,12 @@ public sealed class BlobDocumentStore(
         string projectCode,
         CancellationToken cancellationToken = default)
     {
-        var safeName = SanitiseFileName(fileName);
-        var extension = Path.GetExtension(safeName).ToLowerInvariant();
-
-        if (!_options.AllowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"'{extension}' is not an accepted document type. Accepted types: "
-                + string.Join(", ", _options.AllowedExtensions) + ".");
-        }
+        var safeName = DocumentNaming.SanitiseFileName(fileName);
+        DocumentNaming.EnsureAcceptedExtension(safeName, _options.AllowedExtensions);
 
         var container = client.GetBlobContainerClient(_options.ContainerName);
 
-        // The blob name is built here, never taken from the upload: a file called
-        // "../../secrets.txt" gets a new name like any other.
-        var blobName = $"{projectCode}/{DateTime.UtcNow:yyyy/MM}/{Guid.NewGuid():N}{extension}";
+        var blobName = DocumentNaming.BuildStorageKey(projectCode, safeName);
         var blob = container.GetBlobClient(blobName);
 
         await blob.UploadAsync(
@@ -118,15 +109,5 @@ public sealed class BlobDocumentStore(
                 blobName);
             return null;
         }
-    }
-
-    /// <summary>Keeps the name the user will see, without letting it carry a path.</summary>
-    private static string SanitiseFileName(string fileName)
-    {
-        var name = Path.GetFileName(fileName);
-        var invalid = Path.GetInvalidFileNameChars();
-        var cleaned = new string(name.Select(c => invalid.Contains(c) ? '_' : c).ToArray()).Trim();
-
-        return string.IsNullOrWhiteSpace(cleaned) ? "document" : cleaned;
     }
 }

@@ -1,0 +1,290 @@
+@page "/admin/projects/{ProjectId:int}/edit"
+@attribute [Authorize(Policy = AuthorizationPolicies.Administer)]
+@rendermode InteractiveServer
+@using PMO360.Web.ErrorHandling
+@inject IProjectService ProjectService
+@inject IReferenceDataService Reference
+@inject NavigationManager Navigation
+
+@* FR-05. The PMO maintains a project's particulars: who owns it, which entity and department it
+   belongs to, the consultant, the dates and the priority.
+
+   Status, progress, phase and the management attention flag are deliberately absent. Those move
+   only when the project manager submits an update (FR-11), and a PMO edit that could set them
+   would be a second way for the dashboard to change — with no entry in the history explaining
+   why it changed. *@
+
+<PageTitle>@(_name is { Length: > 0 } ? _name : "Edit project") — PMO360</PageTitle>
+
+<div class="page" style="max-width:940px">
+    <div class="breadcrumb">
+        <a href="/admin">Administration</a><span>·</span>
+        <a href="@($"/projects/{ProjectId}")">@_name</a><span>·</span>
+        Edit
+    </div>
+
+    @if (!_loaded)
+    {
+        <div class="card"><div class="empty">Loading…</div></div>
+    }
+    else if (!_found)
+    {
+        <div class="card">
+            <div class="empty">That project does not exist, or it is not one you have access to.</div>
+        </div>
+    }
+    else
+    {
+        <div class="page-head">
+            <div>
+                <h1 class="page-title">Edit project</h1>
+                <div class="subtitle">@_projectCode · @_name</div>
+            </div>
+        </div>
+
+        <div class="card">
+            @if (_error is not null)
+            {
+                <div class="validation" role="alert">@_error</div>
+            }
+
+            @if (_saved)
+            {
+                <div class="notice good" style="margin-bottom:18px">
+                    <strong>Saved.</strong> The project record has been updated.
+                </div>
+            }
+
+            <div class="field">
+                <label for="name">Project name</label>
+                <input id="name" type="text" value="@_name" @onchange="@(e => _name = e.Value?.ToString() ?? "")" />
+            </div>
+
+            <div class="field">
+                <label for="description">Description</label>
+                <textarea id="description" style="min-height:72px" value="@_description"
+                          @onchange="@(e => _description = e.Value?.ToString())"></textarea>
+            </div>
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="entity">Reporting entity</label>
+                    <select id="entity" value="@_entityId" @onchange="@(e => _entityId = ParseInt(e.Value))">
+                        @foreach (var entity in _entities)
+                        {
+                            <option value="@entity.Id">@entity.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="department">Department</label>
+                    <select id="department" value="@_departmentId" @onchange="@(e => _departmentId = ParseInt(e.Value))">
+                        @foreach (var department in _departments)
+                        {
+                            <option value="@department.Id">@department.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="consultant">Consultant / vendor</label>
+                    <select id="consultant" value="@_consultantId" @onchange="@(e => _consultantId = ParseInt(e.Value))">
+                        <option value="0">Not appointed</option>
+                        @foreach (var consultant in _consultants)
+                        {
+                            <option value="@consultant.Id">@consultant.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="owner">Project owner</label>
+                    <input id="owner" type="text" value="@_owner" @onchange="@(e => _owner = e.Value?.ToString() ?? "")" />
+                </div>
+                <div class="field">
+                    <label for="business-owner">Business owner</label>
+                    <input id="business-owner" type="text" value="@_businessOwner"
+                           @onchange="@(e => _businessOwner = e.Value?.ToString() ?? "")" />
+                </div>
+                <div class="field">
+                    <label for="manager">Project manager</label>
+                    <input id="manager" type="text" value="@_manager" @onchange="@(e => _manager = e.Value?.ToString() ?? "")" />
+                </div>
+                <div class="field">
+                    <label for="sponsor">Sponsor <span class="hint">— receives delay escalations</span></label>
+                    <input id="sponsor" type="text" value="@_sponsor" @onchange="@(e => _sponsor = e.Value?.ToString() ?? "")" />
+                </div>
+            </div>
+
+            @if (!string.Equals(_manager, _originalManager, StringComparison.OrdinalIgnoreCase))
+            {
+                <p class="small" style="color:var(--at-risk);margin:-8px 0 18px">
+                    Changing the project manager gives the new manager access to this project and
+                    puts it in their "My projects" view. The previous manager keeps the updates
+                    they submitted.
+                </p>
+            }
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="priority">Priority</label>
+                    <select id="priority" value="@((int)_priority)" @onchange="@(e => _priority = (ProjectPriority)ParseInt(e.Value))">
+                        <option value="1">Low</option>
+                        <option value="2">Medium</option>
+                        <option value="3">High</option>
+                        <option value="4">Critical</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="start">Start date</label>
+                    <input id="start" type="date" value="@_start.ToString("yyyy-MM-dd")"
+                           @onchange="@(e => _start = ParseDate(e.Value) ?? _start)" />
+                </div>
+                <div class="field">
+                    <label for="target">Target completion</label>
+                    <input id="target" type="date" value="@_target.ToString("yyyy-MM-dd")"
+                           @onchange="@(e => _target = ParseDate(e.Value) ?? _target)" />
+                </div>
+            </div>
+
+            <div class="btn-row end">
+                <a class="btn" href="@($"/projects/{ProjectId}")">Cancel</a>
+                <button class="btn primary" @onclick="SaveAsync" disabled="@_busy">Save changes</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-head"><h2>What this page does not change</h2></div>
+            <p class="muted" style="max-width:80ch;margin:0">
+                Status, progress, current phase and the management attention flag move only when the
+                project manager submits an update, so that every figure on the dashboard has a dated
+                entry behind it explaining how it got there (FR-11, FR-12). To close the project
+                instead, use <a href="/admin">Administration</a>.
+            </p>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int ProjectId { get; set; }
+
+    private IReadOnlyList<ReportingEntity> _entities = Array.Empty<ReportingEntity>();
+    private IReadOnlyList<Department> _departments = Array.Empty<Department>();
+    private IReadOnlyList<Consultant> _consultants = Array.Empty<Consultant>();
+
+    private string _projectCode = string.Empty;
+    private string _name = string.Empty;
+    private string? _description;
+    private int _entityId;
+    private int _departmentId;
+    private int _consultantId;
+    private string _owner = string.Empty;
+    private string _businessOwner = string.Empty;
+    private string _manager = string.Empty;
+    private string _originalManager = string.Empty;
+    private string _sponsor = string.Empty;
+    private ProjectPriority _priority = ProjectPriority.Medium;
+    private DateOnly _start = DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly _target = DateOnly.FromDateTime(DateTime.Today);
+
+    private bool _loaded;
+    private bool _found;
+    private bool _busy;
+    private bool _saved;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _entities = await Reference.GetEntitiesAsync();
+        _departments = await Reference.GetDepartmentsAsync();
+        _consultants = await Reference.GetConsultantsAsync();
+
+        var detail = await ProjectService.GetDetailAsync(ProjectId);
+        _loaded = true;
+
+        if (detail is null)
+        {
+            _found = false;
+            return;
+        }
+
+        _found = true;
+
+        var project = detail.Project;
+        _projectCode = project.ProjectCode;
+        _name = project.Name;
+        _description = project.Description;
+        _entityId = project.ReportingEntityId;
+        _departmentId = project.DepartmentId;
+        _consultantId = project.ConsultantId ?? 0;
+        _owner = project.ProjectOwner.DisplayName;
+        _businessOwner = project.BusinessOwner.DisplayName;
+        _manager = project.ProjectManager.DisplayName;
+        _originalManager = project.ProjectManager.DisplayName;
+        _sponsor = project.Sponsor.DisplayName;
+        _priority = project.Priority;
+        _start = project.StartDate;
+        _target = project.TargetCompletionDate;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name) || _entityId == 0 || _departmentId == 0
+            || string.IsNullOrWhiteSpace(_owner) || string.IsNullOrWhiteSpace(_businessOwner)
+            || string.IsNullOrWhiteSpace(_manager) || string.IsNullOrWhiteSpace(_sponsor))
+        {
+            _error = "Name, entity, department, project owner, business owner, project manager and sponsor are all required.";
+            _saved = false;
+            return;
+        }
+
+        if (_target < _start)
+        {
+            _error = "The target completion date cannot be before the start date.";
+            _saved = false;
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await ProjectService.UpdateParticularsAsync(ProjectId, new CreateProjectRequest(
+                _name,
+                _description,
+                _entityId,
+                _departmentId,
+                _consultantId == 0 ? null : _consultantId,
+                new PersonRef(_owner.Trim()),
+                new PersonRef(_businessOwner.Trim()),
+                new PersonRef(_manager.Trim()),
+                new PersonRef(_sponsor.Trim()),
+                _priority,
+                _start,
+                _target,
+                // The opening phase is only meaningful when a project is created; the current
+                // phase belongs to the update form, so it is not sent from here.
+                null));
+
+            _originalManager = _manager;
+            _saved = true;
+        }
+        catch (Exception ex)
+        {
+            _error = UserMessage.For(ex);
+            _saved = false;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static DateOnly? ParseDate(object? value) =>
+        DateOnly.TryParse(value?.ToString(), out var date) ? date : null;
+
+    private static int ParseInt(object? value) =>
+        int.TryParse(value?.ToString(), out var parsed) ? parsed : 0;
+}

@@ -82,6 +82,26 @@ For UAT, add `Notifications__RedirectAllTo` with one address. Every notification
 instead of to the business, so WF-01 to WF-08 can be exercised end to end without mailing the
 board. `Notifications__Enabled=false` switches them off entirely.
 
+## Where documents are kept
+
+`Storage:Provider` chooses where the bytes of a supporting document live (FR-26). The catalogue
+row in `pmo.Attachment` — who attached what, to which project and which update — is written
+either way, so the provider can be changed without a schema change.
+
+| Provider | Where the bytes go | Use it when |
+| --- | --- | --- |
+| `Blob` (default) | Azure Blob Storage | In Azure. Cheapest, and it keeps large files out of the data file and out of every database backup. Downloads are served by storage directly through a short-lived link. |
+| `Database` | SQL Server, `pmo.AttachmentContent` | On premises with no storage account, or in UAT where one database is simpler to move and restore than a database plus a container. Run `db/017_attachment_content.sql` first. Downloads stream through the portal. |
+| `None` | Nowhere | Attaching a document says so; every other page works. |
+
+`Database` is the simpler estate and the more expensive one to live with: BR-07 keeps everything,
+so the data file only grows, and every backup carries every meeting paper ever attached.
+`usp_AttachmentContent_GetUsage` reports what it is holding — worth watching before it is a
+surprise at a month end.
+
+If `Provider` is `Blob` but `Storage:ServiceUri` is missing or not a usable URI, the portal logs
+a warning and runs without attachments rather than failing. It is worth more running than not.
+
 ## Running without single sign-on
 
 `Authentication:EnableSso` set to `false` starts the portal with no sign-in at all. Everyone who

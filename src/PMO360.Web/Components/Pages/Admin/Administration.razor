@@ -47,7 +47,10 @@
                             <td><StatusBadge Status="row.Status" /></td>
                             <td class="date">@(row.LastUpdateDate?.ToString("dd-MMM-yy") ?? "Never")</td>
                             <td>
-                                <button class="btn link" @onclick="@(() => StartClose(row))">Close</button>
+                                <div class="btn-row">
+                                    <a class="btn link" href="@($"/admin/projects/{row.ProjectId}/edit")">Edit</a>
+                                    <button class="btn link" @onclick="@(() => StartClose(row))">Close</button>
+                                </div>
                             </td>
                         </tr>
                     }

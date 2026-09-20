@@ -26,6 +26,7 @@ in their own `GO` batch, because a batch aborts on error and takes the rest of t
 | `014_procs_dashboard.sql` | The management dashboard and the FR-23 views. |
 | `015_procs_attachment_notification.sql` | Supporting documents, and the data behind WF-01 to WF-08. |
 | `016_procs_project.sql` | Portfolio search and the standard views, project detail, create, close, reopen, particulars and assignments. Runs after the others because `usp_Project_GetDetail` calls them. |
+| `017_attachment_content.sql` | Document storage inside the database, for `Storage:Provider` set to `Database`. Not needed when documents go to Azure Blob Storage. |
 | `020_views_powerbi.sql` | The reporting views Power BI reads (section 5.4). |
 | `030_permissions.sql` | The application and Power BI principals and their rights. Set the two principal names first. |
 
